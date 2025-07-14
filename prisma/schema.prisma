@@ -1,0 +1,48 @@
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+model User {
+  id        String       @id @default(cuid())
+  email     String       @unique
+  name      String?
+  avatarUrl String?
+  goal      Goal?
+  mealLogs  MealLog[]
+  workLogs  WorkoutLog[]
+  weightLog WeightLog[]
+}
+model Goal {
+  id            String @id @default(cuid())
+  initialWeight Float
+  targetWeight  Float
+  durationWeeks Int
+  user          User   @relation(fields: [userId], references: [id])
+  userId        String @unique
+}
+model MealLog {
+  id     String   @id @default(cuid())
+  date   DateTime
+  slot   String
+  status Boolean  @default(false)
+  user   User     @relation(fields: [userId], references: [id])
+  userId String
+}
+model WorkoutLog {
+  id     String   @id @default(cuid())
+  date   DateTime
+  type   String
+  status Boolean  @default(false)
+  user   User     @relation(fields: [userId], references: [id])
+  userId String
+}
+model WeightLog {
+  id     String   @id @default(cuid())
+  date   DateTime
+  weight Float
+  user   User     @relation(fields: [userId], references: [id])
+  userId String
+}
