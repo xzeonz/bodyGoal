@@ -87,7 +87,20 @@ yarn dev
 
 ## Kontribusi
 
-Modul ini dirancang untuk diintegrasikan dengan bagian lain dari proyek BodyGoal oleh tim. Silakan koordinasikan dengan rekan tim Anda untuk penggabungan dan deployment.
+### 🟥 Ryan – **Bagian AI & Upload (OpenAI + R2 + .env)**
+
+**Fokus: Merespon permintaan user pakai AI + handle upload gambar.**
+
+### Yang sudah dikerjakan:
+
+1. Membuat repository GitHub terbaru untuk modul ini.
+2. Mengimplementasikan **AI Plan Generator (simulasi)** dengan endpoint `POST /api/ai-plan` yang menerima input berat awal, target, dan durasi, serta mengeluarkan kalori per hari, gaya latihan, dan jenis makanan.
+3. Membuat endpoint **Upload Gambar** `POST /api/upload-photo` yang mensimulasikan upload gambar dan menyimpan URL dummy ke Cloudflare R2.
+4. Menyusun file `.env.local` dengan variabel environment penting seperti `OPENAI_API_KEY`, `DATABASE_URL` (NeonDB), `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, dan `R2_ACCESS_KEY`.
+5. Menambahkan fungsi bantu:
+   - Kalkulasi kalori berdasarkan berat dan goal.
+   - Evaluasi badge mingguan.
+   - Fungsi tanggal hari ini (`getToday()`).
 
 ---
 
