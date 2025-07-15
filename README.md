@@ -1,36 +1,96 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+# Modul AI & Upload BodyGoal
 
-## Getting Started
+## Gambaran Umum
 
-First, run the development server:
+Modul ini mengimplementasikan fitur utama untuk proyek BodyGoal yang berfokus pada pemrosesan permintaan pengguna menggunakan AI dan penanganan upload gambar. Modul ini dirancang untuk diintegrasikan dengan bagian lain dalam repositori GitHub yang sama.
+
+---
+
+## Fitur
+
+### 1. AI Plan Generator (Simulasi)
+
+- **Endpoint:** `POST /api/ai-plan` (diimplementasikan sebagai server action Next.js)
+- **Input:**
+  - `beratAwal` (number): Berat awal dalam kg
+  - `beratTarget` (number): Berat target dalam kg
+  - `durasiMinggu` (number): Durasi dalam minggu
+  - `goal` (string): Salah satu dari `cutting`, `bulking`, atau `maintain`
+- **Output:**
+  - `dailyCalories` (number): Rekomendasi kalori harian
+  - `workoutStyle` (string): Gaya latihan yang disarankan
+  - `mealType` (string): Jenis makanan yang disarankan
+
+- **Lokasi:**
+  - Server action: `src/app/action/ai-plan/route.js`
+  - Halaman client untuk testing: `src/app/ai-plan/page.js`
+  - Halaman testing lengkap: `src/app/test/page.js`
+
+---
+
+### 2. Upload Gambar (Simulasi)
+
+- **Endpoint:** `POST /api/upload-photo` (server action Next.js)
+- **Fungsi:** Mensimulasikan upload gambar dengan mengembalikan URL dummy (sebagai placeholder untuk integrasi Cloudflare R2)
+- **Lokasi:**
+  - Server action: `src/app/action/upload-photo/route.js`
+  - Tombol testing pada halaman lengkap: `src/app/test/page.js`
+
+---
+
+### 3. Fungsi Bantu
+
+- `calculateCalories(bmr, activityLevel, goal)` - Menghitung kebutuhan kalori berdasarkan BMR, aktivitas, dan tujuan.
+- `evaluateBadge(todayWeight, prevWeight)` - Mengevaluasi badge progres mingguan.
+- `getToday()` - Mengembalikan tanggal hari ini dalam format `YYYY-MM-DD`.
+
+- **Lokasi:** `src/lib/`
+
+---
+
+### 4. Variabel Environment
+
+Buat file `.env.local` di root proyek dengan variabel berikut:
+
+```
+OPENAI_API_KEY=your_openai_api_key_here
+DATABASE_URL=your_neondb_database_url_here
+GOOGLE_CLIENT_ID=your_google_client_id_here
+GOOGLE_CLIENT_SECRET=your_google_client_secret_here
+R2_ACCESS_KEY=your_cloudflare_r2_access_key_here
+```
+
+---
+
+### 5. Testing
+
+- Gunakan halaman testing lengkap di `/test` untuk menguji fitur AI Plan, upload gambar, dan AI Coach.
+- Jalankan server Next.js dengan perintah:
 
 ```bash
 npm run dev
-# or
+# atau
 yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+- Akses halaman testing di: `http://localhost:3000/test`
 
-You can start editing the page by modifying `app/page.js`. The page auto-updates as you edit the file.
+---
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Catatan
 
-## Learn More
+- Fitur AI Coach menggunakan model GPT-3.5-turbo dari OpenAI dan diimplementasikan di `src/app/action/ai-coach/route.js`.
+- Fitur upload gambar saat ini hanya mengembalikan URL dummy dan perlu diintegrasikan dengan Cloudflare R2 untuk upload sebenarnya.
+- Fungsi bantu sudah diimplementasikan sebagai ES module untuk konsistensi.
 
-To learn more about Next.js, take a look at the following resources:
+---
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Kontribusi
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Modul ini dirancang untuk diintegrasikan dengan bagian lain dari proyek BodyGoal oleh tim. Silakan koordinasikan dengan rekan tim Anda untuk penggabungan dan deployment.
 
-## Deploy on Vercel
+---
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Lisensi
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Tentukan lisensi proyek Anda di sini.
