@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { generatePlan } from "../action/ai-plan/route";
-import { uploadDummyPhoto } from "../action/upload-photo/route";
-import { askCoach } from "../action/ai-coach/route";
+import { generatePlan } from "../action";
+import { uploadDummyPhoto } from "../action";
+import { askCoach } from "../action";
 
 export default function TestPage() {
   // AI Plan state
