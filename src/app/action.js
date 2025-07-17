@@ -5,40 +5,62 @@ import { prisma } from "../lib/prisma";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { OpenAI } from "openai";
+import { getSession } from "../lib/auth";
+
+// Helper function untuk menghitung target kalori
+function calculateCalories(weight, height, age, gender, activityLevel, goal) {
+  // Hitung BMR menggunakan Mifflin-St Jeor Equation
+  let bmr;
+  if (gender === "male") {
+    bmr = 10 * weight + 6.25 * height - 5 * age + 5;
+  } else {
+    bmr = 10 * weight + 6.25 * height - 5 * age - 161;
+  }
+
+  // Activity multiplier
+  const activityMultipliers = {
+    sedentary: 1.2,
+    light: 1.375,
+    moderate: 1.55,
+    active: 1.725,
+    "very active": 1.9,
+  };
+
+  const tdee = bmr * (activityMultipliers[activityLevel] || 1.2);
+
+  // Adjust berdasarkan goal
+  if (goal.toLowerCase().includes("lose") || goal.toLowerCase().includes("weight loss")) {
+    return Math.round(tdee - 500); // Deficit 500 kalori untuk weight loss
+  } else if (goal.toLowerCase().includes("gain") || goal.toLowerCase().includes("muscle")) {
+    return Math.round(tdee + 300); // Surplus 300 kalori untuk muscle gain
+  } else {
+    return Math.round(tdee); // Maintenance untuk toning/general fitness
+  }
+}
 
 export async function saveOnboardingData(formData) {
+  "use server";
+  
+  const session = await getSession();
+  if (!session?.user) {
+    redirect("/login");
+  }
+
   try {
-    const userId = "user_dummy_123";
+    const gender = formData.get("gender");
+    const age = parseInt(formData.get("age"));
+    const height = parseInt(formData.get("height"));
+    const currentWeight = parseFloat(formData.get("currentWeight"));
+    const activityLevel = formData.get("activityLevel");
 
-    // Create user first if not exists
-    await prisma.user.upsert({
-      where: { id: userId },
-      update: {},
-      create: {
-        id: userId,
-        email: "dummy@example.com",
-        name: "Dummy User",
-        password: "dummy123", // Add required password field
-      },
-    });
-
-    // Create or update onboarding data
-    await prisma.onboarding.upsert({
-      where: { userId: userId },
-      update: {
-        gender: formData.get("gender"),
-        age: parseInt(formData.get("age")),
-        height: parseInt(formData.get("height")),
-        currentWeight: parseFloat(formData.get("currentWeight")),
-        activityLevel: formData.get("activityLevel"),
-      },
-      create: {
-        userId: userId,
-        gender: formData.get("gender"),
-        age: parseInt(formData.get("age")),
-        height: parseInt(formData.get("height")),
-        currentWeight: parseFloat(formData.get("currentWeight")),
-        activityLevel: formData.get("activityLevel"),
+    await prisma.onboarding.create({
+      data: {
+        userId: session.user.id,
+        gender,
+        age,
+        height,
+        currentWeight,
+        activityLevel,
       },
     });
 
@@ -53,16 +75,95 @@ export async function saveOnboardingData(formData) {
 }
 
 export async function saveFitnessGoal(formData) {
+  "use server";
+  
+  const session = await getSession();
+  if (!session?.user) {
+    redirect("/login");
+  }
+  
   try {
-    const userId = "user_dummy_123";
     const goal = formData.get("goal");
 
+    // Update onboarding dengan goal
     await prisma.onboarding.update({
-      where: { userId: userId },
+      where: { userId: session.user.id },
       data: { goal: goal },
     });
 
-    console.log("✅ Aksi saveFitnessGoal BERHASIL.");
+    // Auto-generate AI plan setelah goal setting
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      include: { onboarding: true },
+    });
+
+    if (user?.onboarding) {
+      const targetCalories = calculateCalories(
+        user.onboarding.currentWeight,
+        user.onboarding.height,
+        user.onboarding.age,
+        user.onboarding.gender,
+        user.onboarding.activityLevel,
+        user.onboarding.goal
+      );
+
+      // Generate AI plan menggunakan OpenAI
+      const completion = await openai.chat.completions.create({
+        model: "gpt-3.5-turbo",
+        messages: [
+          {
+            role: "system",
+            content: `You are a professional fitness and nutrition coach. Create a personalized daily plan based on user data. Return ONLY a JSON object with this exact structure:
+{
+  "mealPlan": [
+    {"name": "Breakfast name", "calories": number, "description": "brief description"},
+    {"name": "Lunch name", "calories": number, "description": "brief description"},
+    {"name": "Dinner name", "calories": number, "description": "brief description"},
+    {"name": "Snack name", "calories": number, "description": "brief description"}
+  ],
+  "workoutPlan": [
+    {"name": "Exercise name", "duration": number, "description": "brief description"},
+    {"name": "Exercise name", "duration": number, "description": "brief description"},
+    {"name": "Exercise name", "duration": number, "description": "brief description"}
+  ]
+}`,
+          },
+          {
+            role: "user",
+            content: `Create a daily plan for:
+- Gender: ${user.onboarding.gender}
+- Age: ${user.onboarding.age}
+- Height: ${user.onboarding.height}cm
+- Weight: ${user.onboarding.currentWeight}kg
+- Activity Level: ${user.onboarding.activityLevel}
+- Goal: ${user.onboarding.goal}
+- Target Calories: ${targetCalories}
+
+Make sure total meal calories approximately match target calories.`,
+          },
+        ],
+        temperature: 0.7,
+      });
+
+      const aiPlan = JSON.parse(completion.choices[0].message.content);
+      
+      // Save AI plan ke database
+      await prisma.aiPlan.upsert({
+        where: { userId: session.user.id },
+        update: {
+          mealPlan: JSON.stringify(aiPlan.mealPlan),
+          workoutPlan: JSON.stringify(aiPlan.workoutPlan),
+          generatedAt: new Date(),
+        },
+        create: {
+          userId: session.user.id,
+          mealPlan: JSON.stringify(aiPlan.mealPlan),
+          workoutPlan: JSON.stringify(aiPlan.workoutPlan),
+        },
+      });
+    }
+
+    console.log("✅ Aksi saveFitnessGoal + AI Plan Generation BERHASIL.");
   } catch (error) {
     console.error("❌ Aksi saveFitnessGoal GAGAL:", error);
     return;
@@ -73,16 +174,22 @@ export async function saveFitnessGoal(formData) {
 }
 
 export async function getUserData() {
-  const userId = "user_dummy_123";
-
+  "use server";
+  
+  const session = await getSession();
+  if (!session?.user) {
+    return null;
+  }
+  
   try {
     const user = await prisma.user.findUnique({
-      where: { id: userId },
+      where: { id: session.user.id },
       include: {
-        goal: true,
-        mealLogs: true,
-        workoutLogs: true,
-        weightLog: true,
+        onboarding: true,
+        meals: true,
+        workouts: true,
+        weights: true,
+        aiPlan: true,
       },
     });
     console.log("✅ Aksi getUserData BERHASIL.");
@@ -94,15 +201,22 @@ export async function getUserData() {
 }
 
 export async function logWeight(formData) {
-  const userId = "user_dummy_123";
+  "use server";
+  
+  const session = await getSession();
+  if (!session?.user) {
+    redirect("/login");
+  }
+  
   try {
-    await prisma.weightLog.create({
+    const weight = parseFloat(formData.get("weight"));
+    const date = formData.get("date") || new Date().toISOString().split('T')[0];
+
+    await prisma.weight.create({
       data: {
-        weight: parseFloat(formData.get("weight")),
-        date: new Date(),
-        user: {
-          connect: { id: userId },
-        },
+        userId: session.user.id,
+        weight: weight,
+        date: new Date(date),
       },
     });
     revalidatePath("/dashboard/progress");
@@ -112,31 +226,57 @@ export async function logWeight(formData) {
   }
 }
 
-export async function logMeal(mealLogId, newStatus) {
+export async function logMeal(formData) {
+  "use server";
+  
+  const session = await getSession();
+  if (!session?.user) {
+    redirect("/login");
+  }
+  
   try {
-    await prisma.mealLog.update({
-      where: { id: mealLogId },
-      data: { status: newStatus },
+    const name = formData.get("name");
+    const calories = parseInt(formData.get("calories"));
+    const date = formData.get("date") || new Date().toISOString().split('T')[0];
+
+    await prisma.meal.create({
+      data: {
+        userId: session.user.id,
+        name: name,
+        calories: calories,
+        date: new Date(date),
+      },
     });
     revalidatePath("/dashboard/meal");
-    // ✅ BARIS 115 - BENAR (dengan backticks)
-    console.log(`✅ Aksi logMeal untuk ID ${mealLogId} BERHASIL.`);
-    
-    // ✅ BARIS 130 - BENAR (dengan backticks)
-    console.log(`✅ Aksi logWorkout untuk ID ${workoutLogId} BERHASIL.`);
+    console.log("✅ Aksi logMeal BERHASIL.");
   } catch (error) {
     console.error("❌ Aksi logMeal GAGAL:", error);
   }
 }
 
-export async function logWorkout(workoutLogId, newStatus) {
+export async function logWorkout(formData) {
+  "use server";
+  
+  const session = await getSession();
+  if (!session?.user) {
+    redirect("/login");
+  }
+  
   try {
-    await prisma.workoutLog.update({
-      where: { id: workoutLogId },
-      data: { status: newStatus },
+    const name = formData.get("name");
+    const duration = parseInt(formData.get("duration"));
+    const date = formData.get("date") || new Date().toISOString().split('T')[0];
+
+    await prisma.workout.create({
+      data: {
+        userId: session.user.id,
+        name: name,
+        duration: duration,
+        date: new Date(date),
+      },
     });
     revalidatePath("/dashboard/plan");
-    console.log(`✅ Aksi logWorkout untuk ID ${workoutLogId} BERHASIL.`);
+    console.log("✅ Aksi logWorkout BERHASIL.");
   } catch (error) {
     console.error("❌ Aksi logWorkout GAGAL:", error);
   }
@@ -326,19 +466,23 @@ export async function generatePlan(formData) {
 }
 
 export async function addMealLog(formData) {
-  const userId = "user_dummy_123";
+  "use server";
+  
+  const session = await getSession();
+  if (!session?.user) {
+    redirect("/login");
+  }
+  
   try {
-    await prisma.mealLog.create({
+    await prisma.meal.create({
       data: {
-        slot: formData.get("slot"),
-        date: new Date(formData.get("date")),
-        status: false,
-        user: {
-          connect: { id: userId },
-        },
+        name: formData.get("name") || "Meal",
+        calories: parseInt(formData.get("calories")) || 0,
+        date: formData.get("date") || new Date().toISOString().split('T')[0],
+        userId: session.user.id,
       },
     });
-    revalidatePath("/dashboard/meal");
+    revalidatePath("/dashboard");
     console.log("✅ Aksi addMealLog BERHASIL.");
   } catch (error) {
     console.error("❌ Aksi addMealLog GAGAL:", error);
@@ -346,22 +490,23 @@ export async function addMealLog(formData) {
 }
 
 export async function addWorkoutLog(formData) {
-  const userId = "user_dummy_123";
+  "use server";
+  
+  const session = await getSession();
+  if (!session?.user) {
+    redirect("/login");
+  }
+  
   try {
-    await prisma.workoutLog.create({
+    await prisma.workout.create({
       data: {
-        exercise: formData.get("exercise"),
-        sets: parseInt(formData.get("sets")) || 3,
-        reps: parseInt(formData.get("reps")) || 10,
-        weight: parseFloat(formData.get("weight")) || 0,
-        date: new Date(formData.get("date")),
-        status: false,
-        user: {
-          connect: { id: userId },
-        },
+        name: formData.get("name") || formData.get("exercise") || "Workout",
+        duration: parseInt(formData.get("duration")) || parseInt(formData.get("sets")) * parseInt(formData.get("reps")) || 30,
+        date: formData.get("date") || new Date().toISOString().split('T')[0],
+        userId: session.user.id,
       },
     });
-    revalidatePath("/dashboard/plan");
+    revalidatePath("/dashboard");
     console.log("✅ Aksi addWorkoutLog BERHASIL.");
   } catch (error) {
     console.error("❌ Aksi addWorkoutLog GAGAL:", error);
