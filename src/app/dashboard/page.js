@@ -71,12 +71,55 @@ async function generateAIPlan(formData) {
   const session = await getSession();
   if (!session?.user) return;
 
-  const user = await prisma.user.findUnique({
+  // Check if this is onboarding data submission
+  const age = formData.get("age");
+  const height = formData.get("height");
+  const currentWeight = formData.get("currentWeight");
+  const targetWeight = formData.get("targetWeight");
+  const gender = formData.get("gender");
+  const activityLevel = formData.get("activityLevel");
+  const goal = formData.get("goal");
+
+  let user = await prisma.user.findUnique({
     where: { id: session.user.id },
     include: {
       onboarding: true,
     },
   });
+
+  // If onboarding data is provided, save it
+  if (age && height && currentWeight && gender && activityLevel && goal) {
+    await prisma.onboarding.upsert({
+      where: { userId: session.user.id },
+      update: {
+        age: parseInt(age),
+        height: parseInt(height),
+        currentWeight: parseFloat(currentWeight),
+        targetWeight: parseFloat(targetWeight),
+        gender,
+        activityLevel,
+        goal,
+      },
+      create: {
+        userId: session.user.id,
+        age: parseInt(age),
+        height: parseInt(height),
+        currentWeight: parseFloat(currentWeight),
+        targetWeight: parseFloat(targetWeight),
+        gender,
+        activityLevel,
+        goal,
+      },
+    });
+
+    // Refresh user data
+    user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      include: {
+        onboarding: true,
+      },
+    });
+  }
 
   if (!user?.onboarding) return;
 
@@ -129,25 +172,191 @@ Make sure total meal calories approximately match target calories.`,
 
     const aiPlan = JSON.parse(completion.choices[0].message.content);
     
+    // Convert AI plan to string format for to-do lists
+    const mealPlanString = aiPlan.mealPlan.map(meal => `${meal.name} (${meal.calories} cal)`).join('\n');
+    const workoutPlanString = aiPlan.workoutPlan.map(workout => `${workout.name} (${workout.duration} min)`).join('\n');
+    
     // Save AI plan to database
     await prisma.aiPlan.upsert({
       where: { userId: session.user.id },
       update: {
-        mealPlan: JSON.stringify(aiPlan.mealPlan),
-        workoutPlan: JSON.stringify(aiPlan.workoutPlan),
+        mealPlan: mealPlanString,
+        workoutPlan: workoutPlanString,
         generatedAt: new Date(),
       },
       create: {
         userId: session.user.id,
-        mealPlan: JSON.stringify(aiPlan.mealPlan),
-        workoutPlan: JSON.stringify(aiPlan.workoutPlan),
+        mealPlan: mealPlanString,
+        workoutPlan: workoutPlanString,
         generatedAt: new Date(),
       },
     });
 
     revalidatePath("/dashboard");
+    
+    // Redirect with success message if this was onboarding
+    if (age && height && currentWeight && gender && activityLevel && goal) {
+      redirect("/dashboard?tab=plan&generated=true");
+    }
   } catch (error) {
     console.error("AI Plan generation failed:", error);
+  }
+}
+
+// Generate AI Suggestions for each tab
+async function generateAISuggestions(userData, currentData, suggestionType) {
+  "use server";
+  try {
+    const completion = await openai.chat.completions.create({
+      model: "gpt-3.5-turbo",
+      messages: [
+        {
+          role: "system",
+          content: `You are a professional fitness and nutrition coach. Provide personalized suggestions based on user's current progress and goals. Keep suggestions concise, actionable, and motivating. Return ONLY a valid JSON array of 2-3 suggestion strings. Do not include any markdown formatting or code blocks.`,
+        },
+        {
+          role: "user",
+          content: `User Profile:
+- Gender: ${userData.gender}
+- Age: ${userData.age}
+- Goal: ${userData.goal}
+- Activity Level: ${userData.activityLevel}
+
+Current Data: ${JSON.stringify(currentData)}
+
+Provide ${suggestionType} suggestions as a JSON array of strings. Example format: ["suggestion 1", "suggestion 2", "suggestion 3"]`,
+        },
+      ],
+      temperature: 0.7,
+    });
+
+    let content = completion.choices[0].message.content.trim();
+    
+    // Remove markdown code blocks if present
+    if (content.startsWith('```json')) {
+      content = content.replace(/```json\s*/, '').replace(/\s*```$/, '');
+    } else if (content.startsWith('```')) {
+      content = content.replace(/```\s*/, '').replace(/\s*```$/, '');
+    }
+    
+    // Try to parse the JSON
+    const suggestions = JSON.parse(content);
+    
+    // Ensure it's an array
+    if (Array.isArray(suggestions)) {
+      return suggestions;
+    } else {
+      console.error("AI response is not an array:", suggestions);
+      return [];
+    }
+  } catch (error) {
+    console.error("AI Suggestions generation failed:", error);
+    // Return fallback suggestions based on type
+    return getFallbackSuggestions(suggestionType);
+  }
+}
+
+// Fallback suggestions when AI fails
+function getFallbackSuggestions(suggestionType) {
+  const fallbacks = {
+    "overview and motivation": [
+      "Keep tracking your daily progress consistently!",
+      "Stay hydrated and get enough sleep for better results.",
+      "Celebrate small wins on your fitness journey."
+    ],
+    "meal and nutrition": [
+      "Focus on balanced meals with protein, carbs, and healthy fats.",
+      "Plan your meals ahead to stay on track with your goals.",
+      "Include more vegetables and fruits in your daily diet."
+    ],
+    "workout and exercise": [
+      "Start with 30 minutes of exercise, 3 times per week.",
+      "Mix cardio and strength training for best results.",
+      "Listen to your body and rest when needed."
+    ],
+    "progress tracking and weight management": [
+      "Weigh yourself at the same time each day for consistency.",
+      "Track measurements beyond just weight for better insights.",
+      "Focus on long-term trends rather than daily fluctuations."
+    ]
+  };
+  
+  return fallbacks[suggestionType] || [
+    "Stay consistent with your fitness journey!",
+    "Small steps lead to big changes.",
+    "You're doing great, keep it up!"
+  ];
+}
+
+// Ask AI Coach
+async function askCoach(formData) {
+  "use server";
+  const session = await getSession();
+  if (!session?.user) {
+    redirect("/login");
+  }
+
+  const message = formData.get("message");
+  if (!message) return;
+
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    include: {
+      onboarding: true,
+      meals: {
+        where: { date: getToday() },
+        orderBy: { createdAt: "desc" },
+        take: 5,
+      },
+      workouts: {
+        where: { date: getToday() },
+        orderBy: { createdAt: "desc" },
+        take: 5,
+      },
+      weights: {
+        orderBy: { date: "desc" },
+        take: 3,
+      },
+    },
+  });
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: "gpt-3.5-turbo",
+      messages: [
+        {
+          role: "system",
+          content: `You are a professional fitness and nutrition coach. You have access to the user's profile and recent activity. Provide helpful, personalized advice based on their data and question. Be encouraging, specific, and actionable.`,
+        },
+        {
+          role: "user",
+          content: `User Profile:
+- Name: ${user.name}
+- Gender: ${user.onboarding?.gender || "Not specified"}
+- Age: ${user.onboarding?.age || "Not specified"}
+- Goal: ${user.onboarding?.goal || "Not specified"}
+- Activity Level: ${user.onboarding?.activityLevel || "Not specified"}
+- Current Weight: ${user.weights[0]?.weight || user.onboarding?.currentWeight || "Not specified"} kg
+
+Recent Activity:
+- Today's Meals: ${JSON.stringify(user.meals)}
+- Today's Workouts: ${JSON.stringify(user.workouts)}
+- Recent Weights: ${JSON.stringify(user.weights)}
+
+User Question: ${message}`,
+        },
+      ],
+      temperature: 0.7,
+    });
+
+    const response = completion.choices[0].message.content;
+    
+    // Store the conversation in session or database if needed
+    // For now, we'll just redirect back with the response
+    redirect(`/dashboard?tab=coach&response=${encodeURIComponent(response)}`);
+  } catch (error) {
+    console.error("AI Coach failed:", error);
+    redirect("/dashboard?tab=coach&error=true");
   }
 }
 
@@ -157,7 +366,30 @@ export default async function Dashboard({ searchParams }) {
     redirect("/login");
   }
 
-  const activeTab = searchParams?.tab || "overview";
+  // Await searchParams for Next.js 15 compatibility
+  const params = await searchParams;
+
+  // Check if user has completed onboarding
+  const userCheck = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    include: { onboarding: true, aiPlan: true }
+  });
+
+  // If no onboarding data, redirect to AI Plan for onboarding
+  if (!userCheck.onboarding) {
+    if (params?.tab !== 'plan') {
+      redirect('/dashboard?tab=plan&onboarding=true');
+    }
+  }
+
+  // If onboarding complete but no AI plan, redirect to generate plan
+  if (userCheck.onboarding && !userCheck.aiPlan) {
+    if (params?.tab !== 'plan') {
+      redirect('/dashboard?tab=plan&generate=true');
+    }
+  }
+
+  const activeTab = params?.tab || (userCheck.onboarding && userCheck.aiPlan ? "plan" : "plan");
 
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
@@ -219,6 +451,66 @@ export default async function Dashboard({ searchParams }) {
     }
   }
 
+  // Generate AI Suggestions for each tab if user has onboarding data
+  let overviewSuggestions = [];
+  let mealSuggestions = [];
+  let workoutSuggestions = [];
+  let progressSuggestions = [];
+
+  if (user.onboarding) {
+    try {
+      // Overview suggestions based on current progress
+      overviewSuggestions = await generateAISuggestions(
+        user.onboarding,
+        {
+          totalCalories,
+          targetCalories,
+          totalWorkouts,
+          currentWeight,
+          goal: user.onboarding.goal
+        },
+        "overview and motivation"
+      );
+
+      // Meal suggestions based on current intake
+      mealSuggestions = await generateAISuggestions(
+        user.onboarding,
+        {
+          todayCalories: totalCalories,
+          targetCalories,
+          mealsToday: todayMeals.length,
+          goal: user.onboarding.goal
+        },
+        "meal and nutrition"
+      );
+
+      // Workout suggestions based on current activity
+      workoutSuggestions = await generateAISuggestions(
+        user.onboarding,
+        {
+          workoutsToday: totalWorkouts,
+          activityLevel: user.onboarding.activityLevel,
+          goal: user.onboarding.goal
+        },
+        "workout and exercise"
+      );
+
+      // Progress suggestions based on weight history
+      progressSuggestions = await generateAISuggestions(
+        user.onboarding,
+        {
+          currentWeight,
+          targetWeight: user.onboarding.targetWeight,
+          weightHistory: user.weights.slice(0, 5),
+          goal: user.onboarding.goal
+        },
+        "progress tracking and weight management"
+      );
+    } catch (error) {
+      console.error("Failed to generate AI suggestions:", error);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-6xl mx-auto p-6">
@@ -231,16 +523,6 @@ export default async function Dashboard({ searchParams }) {
           <div className="border-b border-gray-200">
             <nav className="flex space-x-8 px-6">
               <a
-                href="/dashboard?tab=overview"
-                className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                  activeTab === "overview"
-                    ? "border-blue-500 text-blue-600"
-                    : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                }`}
-              >
-                Overview
-              </a>
-              <a
                 href="/dashboard?tab=plan"
                 className={`py-4 px-1 border-b-2 font-medium text-sm ${
                   activeTab === "plan"
@@ -251,16 +533,6 @@ export default async function Dashboard({ searchParams }) {
                 🤖 AI Plan
               </a>
               <a
-                href="/dashboard?tab=progress"
-                className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                  activeTab === "progress"
-                    ? "border-blue-500 text-blue-600"
-                    : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                }`}
-              >
-                Progress
-              </a>
-              <a
                 href="/dashboard?tab=meals"
                 className={`py-4 px-1 border-b-2 font-medium text-sm ${
                   activeTab === "meals"
@@ -268,7 +540,7 @@ export default async function Dashboard({ searchParams }) {
                     : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
                 }`}
               >
-                Meals
+                🍽️ Meals
               </a>
               <a
                 href="/dashboard?tab=workouts"
@@ -278,7 +550,37 @@ export default async function Dashboard({ searchParams }) {
                     : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
                 }`}
               >
-                Workouts
+                💪 Workouts
+              </a>
+              <a
+                href="/dashboard?tab=overview"
+                className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === "overview"
+                    ? "border-blue-500 text-blue-600"
+                    : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                }`}
+              >
+                📊 Overview
+              </a>
+              <a
+                href="/dashboard?tab=progress"
+                className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === "progress"
+                    ? "border-blue-500 text-blue-600"
+                    : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                }`}
+              >
+                📈 Progress
+              </a>
+              <a
+                href="/dashboard?tab=coach"
+                className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === "coach"
+                    ? "border-blue-500 text-blue-600"
+                    : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                }`}
+              >
+                🤖 AI Coach
               </a>
             </nav>
           </div>
@@ -329,6 +631,28 @@ export default async function Dashboard({ searchParams }) {
               </span>
             </div>
 
+            {/* AI Suggestions for Overview */}
+            {overviewSuggestions.length > 0 && (
+              <div className="bg-gradient-to-r from-blue-50 to-purple-50 p-6 rounded-lg border border-blue-200">
+                <h3 className="text-lg font-semibold text-gray-700 mb-4 flex items-center">
+                  🤖 AI Suggestions for You
+                  <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
+                    Personalized
+                  </span>
+                </h3>
+                <div className="space-y-3">
+                  {overviewSuggestions.map((suggestion, index) => (
+                    <div key={index} className="flex items-start space-x-3">
+                      <div className="flex-shrink-0 w-6 h-6 bg-blue-500 text-white rounded-full flex items-center justify-center text-xs font-bold">
+                        {index + 1}
+                      </div>
+                      <p className="text-gray-700 text-sm leading-relaxed">{suggestion}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Recent Activity */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="bg-white p-6 rounded-lg shadow">
@@ -375,33 +699,117 @@ export default async function Dashboard({ searchParams }) {
 
         {activeTab === "plan" && (
           <div className="space-y-6">
-            {/* AI Plan Generation */}
-            <div className="bg-gradient-to-r from-blue-50 to-purple-50 p-6 rounded-lg border">
-              <div className="flex justify-between items-center mb-4">
-                <div>
-                  <h3 className="text-xl font-bold text-gray-900 mb-2">
-                    🤖 AI-Generated Personal Plan
-                  </h3>
-                  <p className="text-gray-600">
-                    Get personalized meal and workout plans based on your goals and data
-                  </p>
-                </div>
-                <form action={generateAIPlan}>
-                  <button
-                    type="submit"
-                    className="bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white px-6 py-3 rounded-lg font-semibold shadow-lg transition"
-                  >
-                    Generate New Plan
+            {/* Onboarding Mode */}
+            {params?.onboarding === 'true' && !user.onboarding && (
+              <div className="bg-gradient-to-r from-blue-50 to-purple-50 p-8 rounded-lg border">
+                <h2 className="text-2xl font-bold text-gray-900 mb-4">
+                  🎯 Welcome! Let's Create Your Personal Plan
+                </h2>
+                <p className="text-gray-600 mb-6">
+                  Tell us about yourself to generate personalized meal and workout plans
+                </p>
+                
+                {/* Onboarding Form */}
+                <form action={generateAIPlan} className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Age</label>
+                      <input name="age" type="number" placeholder="25" className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" required />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Height (cm)</label>
+                      <input name="height" type="number" placeholder="170" className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" required />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Current Weight (kg)</label>
+                      <input name="currentWeight" type="number" step="0.1" placeholder="70" className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" required />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Target Weight (kg)</label>
+                      <input name="targetWeight" type="number" step="0.1" placeholder="65" className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" required />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Gender</label>
+                      <select name="gender" className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" required>
+                        <option value="">Select Gender</option>
+                        <option value="male">Male</option>
+                        <option value="female">Female</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Activity Level</label>
+                      <select name="activityLevel" className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" required>
+                        <option value="">Select Activity Level</option>
+                        <option value="sedentary">Sedentary (little/no exercise)</option>
+                        <option value="light">Light (light exercise 1-3 days/week)</option>
+                        <option value="moderate">Moderate (moderate exercise 3-5 days/week)</option>
+                        <option value="active">Active (hard exercise 6-7 days/week)</option>
+                        <option value="very_active">Very Active (very hard exercise, physical job)</option>
+                      </select>
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Your Goal</label>
+                      <select name="goal" className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" required>
+                        <option value="">Select Your Goal</option>
+                        <option value="lose_weight">Lose Weight</option>
+                        <option value="gain_weight">Gain Weight</option>
+                        <option value="maintain_weight">Maintain Weight</option>
+                        <option value="build_muscle">Build Muscle</option>
+                      </select>
+                    </div>
+                  </div>
+                  
+                  <button type="submit" className="w-full bg-gradient-to-r from-blue-500 to-purple-500 text-white py-4 rounded-lg font-bold text-lg hover:from-blue-600 hover:to-purple-600 transition shadow-lg">
+                    🚀 Create My Personal Plan
                   </button>
                 </form>
               </div>
-              
-              {user.aiPlan && (
-                <p className="text-sm text-gray-500">
-                  Last generated: {new Date(user.aiPlan.generatedAt).toLocaleDateString()}
-                </p>
-              )}
-            </div>
+            )}
+
+            {/* Plan Generated Mode */}
+            {user.onboarding && (
+              <div>
+                {/* Success Message for New Plan */}
+                {params?.generated === 'true' && (
+                  <div className="bg-green-50 border border-green-200 p-6 rounded-lg mb-6">
+                    <h3 className="text-lg font-bold text-green-800 mb-2">
+                      ✅ Your Personal Plan is Ready!
+                    </h3>
+                    <p className="text-green-700">
+                      Check other tabs to see your daily to-do lists automatically generated based on your goals.
+                    </p>
+                  </div>
+                )}
+
+                {/* AI Plan Generation */}
+                <div className="bg-gradient-to-r from-blue-50 to-purple-50 p-6 rounded-lg border">
+                  <div className="flex justify-between items-center mb-4">
+                    <div>
+                      <h3 className="text-xl font-bold text-gray-900 mb-2">
+                        🤖 AI-Generated Personal Plan
+                      </h3>
+                      <p className="text-gray-600">
+                        Get personalized meal and workout plans based on your goals and data
+                      </p>
+                    </div>
+                    <form action={generateAIPlan}>
+                      <button
+                        type="submit"
+                        className="bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white px-6 py-3 rounded-lg font-semibold shadow-lg transition"
+                      >
+                        Generate New Plan
+                      </button>
+                    </form>
+                  </div>
+                  
+                  {user.aiPlan && (
+                    <p className="text-sm text-gray-500">
+                      Last generated: {new Date(user.aiPlan.generatedAt).toLocaleDateString()}
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* AI Meal Plan */}
             {aiMealPlan.length > 0 && (
@@ -486,6 +894,28 @@ export default async function Dashboard({ searchParams }) {
 
         {activeTab === "progress" && (
           <div className="space-y-6">
+            {/* AI Suggestions for Progress */}
+            {progressSuggestions.length > 0 && (
+              <div className="bg-gradient-to-r from-yellow-50 to-orange-50 p-6 rounded-lg border border-yellow-200">
+                <h3 className="text-lg font-semibold text-gray-700 mb-4 flex items-center">
+                  📈 AI Progress Insights
+                  <span className="ml-2 text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full">
+                    Goal Tracking
+                  </span>
+                </h3>
+                <div className="space-y-3">
+                  {progressSuggestions.map((suggestion, index) => (
+                    <div key={index} className="flex items-start space-x-3">
+                      <div className="flex-shrink-0 w-6 h-6 bg-yellow-500 text-white rounded-full flex items-center justify-center text-xs font-bold">
+                        {index + 1}
+                      </div>
+                      <p className="text-gray-700 text-sm leading-relaxed">{suggestion}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="bg-white p-6 rounded-lg shadow">
               <h3 className="text-lg font-semibold text-gray-700 mb-4">
                 Update Weight
@@ -537,6 +967,88 @@ export default async function Dashboard({ searchParams }) {
 
         {activeTab === "meals" && (
           <div className="space-y-6">
+            {/* Daily Meal To-Do List */}
+            {user.aiPlan?.mealPlan && (
+              <div className="bg-gradient-to-r from-green-50 to-emerald-50 p-6 rounded-lg border border-green-200">
+                <h3 className="text-lg font-semibold text-gray-700 mb-4 flex items-center">
+                  📋 Today's Meal Plan
+                  <span className="ml-2 text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">
+                    AI Generated
+                  </span>
+                </h3>
+                <div className="space-y-3">
+                  {user.aiPlan.mealPlan.split('\n').filter(line => line.trim()).map((meal, index) => {
+                    const mealName = meal.replace(/^[\d\-\*\s]+/, '').trim();
+                    const isCompleted = todayMeals.some(m => m.name.toLowerCase().includes(mealName.toLowerCase().split(' ')[0]));
+                    
+                    return (
+                      <div key={index} className={`flex items-center space-x-3 p-3 rounded-lg transition ${isCompleted ? 'bg-green-100 border border-green-300' : 'bg-white border border-gray-200'}`}>
+                        <input 
+                          type="checkbox" 
+                          checked={isCompleted}
+                          readOnly
+                          className="w-5 h-5 text-green-600 rounded focus:ring-green-500"
+                        />
+                        <div className="flex-1">
+                          <p className={`text-sm ${isCompleted ? 'text-green-800 line-through' : 'text-gray-700'}`}>
+                            {mealName}
+                          </p>
+                        </div>
+                        {!isCompleted && (
+                          <button 
+                            onClick={() => {
+                              const form = document.createElement('form');
+                              form.style.display = 'none';
+                              const nameInput = document.createElement('input');
+                              nameInput.name = 'name';
+                              nameInput.value = mealName;
+                              const caloriesInput = document.createElement('input');
+                              caloriesInput.name = 'calories';
+                              caloriesInput.value = '300';
+                              form.appendChild(nameInput);
+                              form.appendChild(caloriesInput);
+                              document.body.appendChild(form);
+                              const formData = new FormData(form);
+                              addMeal(formData);
+                              document.body.removeChild(form);
+                            }}
+                            className="text-xs bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded-full transition"
+                          >
+                            Quick Add
+                          </button>
+                        )}
+                        {isCompleted && (
+                          <span className="text-xs text-green-600 font-medium">✓ Done</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* AI Suggestions for Meals */}
+            {mealSuggestions.length > 0 && (
+              <div className="bg-gradient-to-r from-green-50 to-blue-50 p-6 rounded-lg border border-green-200">
+                <h3 className="text-lg font-semibold text-gray-700 mb-4 flex items-center">
+                  🍽️ AI Nutrition Suggestions
+                  <span className="ml-2 text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">
+                    Smart Tips
+                  </span>
+                </h3>
+                <div className="space-y-3">
+                  {mealSuggestions.map((suggestion, index) => (
+                    <div key={index} className="flex items-start space-x-3">
+                      <div className="flex-shrink-0 w-6 h-6 bg-green-500 text-white rounded-full flex items-center justify-center text-xs font-bold">
+                        {index + 1}
+                      </div>
+                      <p className="text-gray-700 text-sm leading-relaxed">{suggestion}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="bg-white p-6 rounded-lg shadow">
               <h3 className="text-lg font-semibold text-gray-700 mb-4">
                 Add New Meal
@@ -612,6 +1124,88 @@ export default async function Dashboard({ searchParams }) {
 
         {activeTab === "workouts" && (
           <div className="space-y-6">
+            {/* Daily Workout To-Do List */}
+            {user.aiPlan?.workoutPlan && (
+              <div className="bg-gradient-to-r from-purple-50 to-pink-50 p-6 rounded-lg border border-purple-200">
+                <h3 className="text-lg font-semibold text-gray-700 mb-4 flex items-center">
+                  🏋️ Today's Workout Plan
+                  <span className="ml-2 text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded-full">
+                    AI Generated
+                  </span>
+                </h3>
+                <div className="space-y-3">
+                  {user.aiPlan.workoutPlan.split('\n').filter(line => line.trim()).map((workout, index) => {
+                    const workoutName = workout.replace(/^[\d\-\*\s]+/, '').trim();
+                    const isCompleted = todayWorkouts.some(w => w.name.toLowerCase().includes(workoutName.toLowerCase().split(' ')[0]));
+                    
+                    return (
+                      <div key={index} className={`flex items-center space-x-3 p-3 rounded-lg transition ${isCompleted ? 'bg-purple-100 border border-purple-300' : 'bg-white border border-gray-200'}`}>
+                        <input 
+                          type="checkbox" 
+                          checked={isCompleted}
+                          readOnly
+                          className="w-5 h-5 text-purple-600 rounded focus:ring-purple-500"
+                        />
+                        <div className="flex-1">
+                          <p className={`text-sm ${isCompleted ? 'text-purple-800 line-through' : 'text-gray-700'}`}>
+                            {workoutName}
+                          </p>
+                        </div>
+                        {!isCompleted && (
+                          <button 
+                            onClick={() => {
+                              const form = document.createElement('form');
+                              form.style.display = 'none';
+                              const nameInput = document.createElement('input');
+                              nameInput.name = 'name';
+                              nameInput.value = workoutName;
+                              const durationInput = document.createElement('input');
+                              durationInput.name = 'duration';
+                              durationInput.value = '30';
+                              form.appendChild(nameInput);
+                              form.appendChild(durationInput);
+                              document.body.appendChild(form);
+                              const formData = new FormData(form);
+                              addWorkout(formData);
+                              document.body.removeChild(form);
+                            }}
+                            className="text-xs bg-purple-500 hover:bg-purple-600 text-white px-3 py-1 rounded-full transition"
+                          >
+                            Quick Add
+                          </button>
+                        )}
+                        {isCompleted && (
+                          <span className="text-xs text-purple-600 font-medium">✓ Done</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* AI Suggestions for Workouts */}
+            {workoutSuggestions.length > 0 && (
+              <div className="bg-gradient-to-r from-purple-50 to-pink-50 p-6 rounded-lg border border-purple-200">
+                <h3 className="text-lg font-semibold text-gray-700 mb-4 flex items-center">
+                  💪 AI Workout Suggestions
+                  <span className="ml-2 text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded-full">
+                    Fitness Tips
+                  </span>
+                </h3>
+                <div className="space-y-3">
+                  {workoutSuggestions.map((suggestion, index) => (
+                    <div key={index} className="flex items-start space-x-3">
+                      <div className="flex-shrink-0 w-6 h-6 bg-purple-500 text-white rounded-full flex items-center justify-center text-xs font-bold">
+                        {index + 1}
+                      </div>
+                      <p className="text-gray-700 text-sm leading-relaxed">{suggestion}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="bg-white p-6 rounded-lg shadow">
               <h3 className="text-lg font-semibold text-gray-700 mb-4">
                 Add New Workout
@@ -681,6 +1275,100 @@ export default async function Dashboard({ searchParams }) {
               ) : (
                 <p className="text-gray-500">No workouts added today</p>
               )}
+            </div>
+          </div>
+        )}
+
+        {activeTab === "coach" && (
+          <div className="space-y-6">
+            <div className="bg-gradient-to-r from-indigo-50 to-purple-50 p-6 rounded-lg border border-indigo-200">
+              <h3 className="text-xl font-bold text-gray-900 mb-2 flex items-center">
+                🤖 AI Personal Coach
+                <span className="ml-2 text-xs bg-indigo-100 text-indigo-800 px-2 py-1 rounded-full">
+                  24/7 Available
+                </span>
+              </h3>
+              <p className="text-gray-600 mb-4">
+                Ask your AI coach anything about fitness, nutrition, motivation, or your progress. 
+                I have access to your profile and recent activity to provide personalized advice.
+              </p>
+            </div>
+
+            {/* Display AI Response */}
+            {searchParams?.response && (
+              <div className="bg-white p-6 rounded-lg shadow border-l-4 border-blue-500">
+                <h4 className="text-lg font-semibold text-gray-700 mb-3 flex items-center">
+                  🤖 Coach Response
+                </h4>
+                <div className="prose prose-sm max-w-none">
+                  <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">
+                    {decodeURIComponent(searchParams.response)}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Error Message */}
+            {searchParams?.error && (
+              <div className="bg-red-50 p-4 rounded-lg border border-red-200">
+                <p className="text-red-700">
+                  Sorry, I'm having trouble right now. Please try again later.
+                </p>
+              </div>
+            )}
+
+            {/* Chat Form */}
+            <div className="bg-white p-6 rounded-lg shadow">
+              <h4 className="text-lg font-semibold text-gray-700 mb-4">
+                💬 Ask Your Coach
+              </h4>
+              <form action={askCoach} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Your Question
+                  </label>
+                  <textarea
+                    name="message"
+                    rows={4}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Example: I'm struggling to stay motivated with my workouts. What should I do?"
+                    required
+                  />
+                </div>
+                <button
+                  type="submit"
+                  className="bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white px-6 py-3 rounded-lg font-semibold shadow-lg transition"
+                >
+                  Ask Coach 🚀
+                </button>
+              </form>
+            </div>
+
+            {/* Quick Questions */}
+            <div className="bg-white p-6 rounded-lg shadow">
+              <h4 className="text-lg font-semibold text-gray-700 mb-4">
+                💡 Quick Questions
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {[
+                  "How can I improve my meal planning?",
+                  "What exercises should I focus on?",
+                  "How to stay motivated?",
+                  "Am I on track with my goals?",
+                  "What should I eat before workout?",
+                  "How to track progress better?"
+                ].map((question, index) => (
+                  <form key={index} action={askCoach} className="inline">
+                    <input type="hidden" name="message" value={question} />
+                    <button
+                      type="submit"
+                      className="w-full text-left p-3 bg-gray-50 hover:bg-blue-50 border border-gray-200 hover:border-blue-300 rounded-lg text-sm text-gray-700 hover:text-blue-700 transition"
+                    >
+                      {question}
+                    </button>
+                  </form>
+                ))}
+              </div>
             </div>
           </div>
         )}
