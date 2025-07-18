@@ -12,7 +12,6 @@ export default function TestPage() {
     weight: "",
     activityLevel: "",
     goal: "",
-    durasi: "",
     question: "",
     mealName: "",
     mealCalories: "",
@@ -31,7 +30,7 @@ export default function TestPage() {
   const handleGeneratePlan = async () => {
     const formData = new FormData();
     Object.entries(form).forEach(([key, value]) => {
-      formData.append(key, value);
+      if (key !== "durasi") formData.append(key, value);
     });
     const output = await generatePlan(formData);
     setPlanResult(output);
@@ -54,18 +53,27 @@ export default function TestPage() {
         margin: "0 auto",
         fontFamily: "Arial, sans-serif",
         fontSize: "18px",
-        color: "#222",
+        color: "white",
       }}
     >
-      <h1 style={{ fontSize: "32px", marginBottom: "32px", fontWeight: "bold" }}>
-        🧪 AI Plan & Coach Tester
+      <h1
+        style={{ fontSize: "32px", marginBottom: "32px", fontWeight: "bold" }}
+      >
+        AI Plan & Coach Tester
       </h1>
 
       <div
         style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "30px" }}
       >
         <div>
-          <label style={{ display: "block", marginBottom: "8px", fontWeight: "600" }}>
+          <label
+            style={{
+              display: "block",
+              marginBottom: "8px",
+              fontWeight: "600",
+              color: "white",
+            }}
+          >
             Gender <span style={{ color: "red" }}>*</span>
           </label>
           <select
@@ -73,7 +81,12 @@ export default function TestPage() {
             value={form.gender}
             onChange={handleChange}
             required
-            style={{ width: "100%", padding: "8px", fontSize: "16px" }}
+            style={{
+              width: "100%",
+              padding: "8px",
+              fontSize: "16px",
+              color: "white",
+            }}
           >
             <option value="">Select gender</option>
             <option value="Male">Male</option>
@@ -82,7 +95,9 @@ export default function TestPage() {
         </div>
 
         <div>
-          <label style={{ display: "block", marginBottom: "8px", fontWeight: "600" }}>
+          <label
+            style={{ display: "block", marginBottom: "8px", fontWeight: "600" }}
+          >
             Age <span style={{ color: "red" }}>*</span>
           </label>
           <input
@@ -92,13 +107,20 @@ export default function TestPage() {
             onChange={handleChange}
             required
             min="1"
-            style={{ width: "100%", padding: "8px", fontSize: "16px" }}
+            style={{
+              width: "100%",
+              padding: "8px",
+              fontSize: "16px",
+              color: "white",
+            }}
             placeholder="Enter your age"
           />
         </div>
 
         <div>
-          <label style={{ display: "block", marginBottom: "8px", fontWeight: "600" }}>
+          <label
+            style={{ display: "block", marginBottom: "8px", fontWeight: "600" }}
+          >
             Height (cm) <span style={{ color: "red" }}>*</span>
           </label>
           <input
@@ -108,13 +130,20 @@ export default function TestPage() {
             onChange={handleChange}
             required
             min="1"
-            style={{ width: "100%", padding: "8px", fontSize: "16px" }}
+            style={{
+              width: "100%",
+              padding: "8px",
+              fontSize: "16px",
+              color: "white",
+            }}
             placeholder="Enter your height in cm"
           />
         </div>
 
         <div>
-          <label style={{ display: "block", marginBottom: "8px", fontWeight: "600" }}>
+          <label
+            style={{ display: "block", marginBottom: "8px", fontWeight: "600" }}
+          >
             Current Weight (kg) <span style={{ color: "red" }}>*</span>
           </label>
           <input
@@ -124,13 +153,20 @@ export default function TestPage() {
             onChange={handleChange}
             required
             min="1"
-            style={{ width: "100%", padding: "8px", fontSize: "16px" }}
+            style={{
+              width: "100%",
+              padding: "8px",
+              fontSize: "16px",
+              color: "white",
+            }}
             placeholder="Enter your current weight in kg"
           />
         </div>
 
         <div style={{ gridColumn: "span 2" }}>
-          <label style={{ display: "block", marginBottom: "8px", fontWeight: "600" }}>
+          <label
+            style={{ display: "block", marginBottom: "8px", fontWeight: "600" }}
+          >
             Activity Level <span style={{ color: "red" }}>*</span>
           </label>
           <select
@@ -138,7 +174,12 @@ export default function TestPage() {
             value={form.activityLevel}
             onChange={handleChange}
             required
-            style={{ width: "100%", padding: "8px", fontSize: "16px" }}
+            style={{
+              width: "100%",
+              padding: "8px",
+              fontSize: "16px",
+              color: "white",
+            }}
           >
             <option value="">Select activity level</option>
             <option value="Sedentary">Sedentary</option>
@@ -149,24 +190,10 @@ export default function TestPage() {
           </select>
         </div>
 
-        <div>
-          <label style={{ display: "block", marginBottom: "8px", fontWeight: "600" }}>
-            Duration (weeks) <span style={{ color: "red" }}>*</span>
-          </label>
-          <input
-            name="durasi"
-            type="number"
-            value={form.durasi}
-            onChange={handleChange}
-            min="1"
-            placeholder="Enter duration in weeks"
-            required
-            style={{ width: "100%", padding: "8px", fontSize: "16px" }}
-          />
-        </div>
-
         <div style={{ gridColumn: "span 2" }}>
-          <label style={{ display: "block", marginBottom: "8px", fontWeight: "600" }}>
+          <label
+            style={{ display: "block", marginBottom: "8px", fontWeight: "600" }}
+          >
             Goal Prompt <span style={{ color: "red" }}>*</span>
           </label>
           <textarea
@@ -176,12 +203,24 @@ export default function TestPage() {
             placeholder="Contoh: Saya ingin turun ke 60kg dalam 2 bulan."
             rows={3}
             required
-            style={{ width: "100%", padding: "8px", fontSize: "16px" }}
+            style={{
+              width: "100%",
+              padding: "8px",
+              fontSize: "16px",
+              color: "white",
+            }}
           />
         </div>
 
         <div style={{ gridColumn: "span 2" }}>
-          <label style={{ display: "block", marginBottom: "8px", fontWeight: "600" }}>
+          <label
+            style={{
+              display: "block",
+              marginBottom: "8px",
+              fontWeight: "600",
+              color: "white",
+            }}
+          >
             Question for AI Coach
           </label>
           <textarea
@@ -190,55 +229,87 @@ export default function TestPage() {
             onChange={handleChange}
             placeholder="Contoh: Apakah saya harus kardio tiap hari?"
             rows={3}
-            style={{ width: "100%", padding: "8px", fontSize: "16px" }}
+            style={{
+              width: "100%",
+              padding: "8px",
+              fontSize: "16px",
+              color: "white",
+              WebkitTextFillColor: "white",
+              "::placeholder": { color: "rgba(255,255,255,0.7)" },
+            }}
           />
         </div>
 
         <div>
-          <label>Meal Name</label>
+          <label
+            style={{ display: "block", marginBottom: "8px", fontWeight: "600" }}
+          >
+            Nama Makanan
+          </label>
           <input
             name="mealName"
             value={form.mealName}
             onChange={handleChange}
+            style={{ color: "white" }}
           />
         </div>
 
         <div>
-          <label>Calories</label>
+          <label
+            style={{ display: "block", marginBottom: "8px", fontWeight: "600" }}
+          >
+            Kalori
+          </label>
           <input
             name="mealCalories"
             type="number"
             value={form.mealCalories}
             onChange={handleChange}
+            style={{ color: "white" }}
           />
         </div>
 
         <div>
-          <label>Workout Name</label>
+          <label
+            style={{ display: "block", marginBottom: "8px", fontWeight: "600" }}
+          >
+            Nama Latihan
+          </label>
           <input
             name="workoutName"
             value={form.workoutName}
             onChange={handleChange}
+            style={{ color: "white" }}
           />
         </div>
 
         <div>
-          <label>Workout Duration (minutes)</label>
+          <label
+            style={{ display: "block", marginBottom: "8px", fontWeight: "600" }}
+          >
+            Durasi Latihan (menit)
+          </label>
           <input
             name="workoutDuration"
             type="number"
             value={form.workoutDuration}
             onChange={handleChange}
+            style={{ color: "white" }}
           />
         </div>
 
         <div style={{ gridColumn: "span 2" }}>
-          <label>Progress: Updated Weight</label>
+          <label
+            style={{ display: "block", marginBottom: "8px", fontWeight: "600" }}
+          >
+            Progres: Berat Badan Terbaru
+          </label>
           <input
             name="updatedWeight"
             type="number"
             value={form.updatedWeight}
             onChange={handleChange}
+            style={{ color: "white" }}
           />
         </div>
       </div>
@@ -253,16 +324,25 @@ export default function TestPage() {
       </div>
 
       <div style={{ marginTop: "32px", display: "flex", gap: "40px" }}>
+        <style>{`
+          input::placeholder, textarea::placeholder, select::placeholder {
+            color: #d3d3d3; /* light gray */
+          }
+        `}</style>
         <div style={{ flex: 1 }}>
           <h3>Generated Plan Result:</h3>
           <div style={resultBoxStyle}>
-            <pre style={{ whiteSpace: "pre-wrap", margin: 0 }}>{planResult}</pre>
+            <pre style={{ whiteSpace: "pre-wrap", margin: 0, color: "black" }}>
+              {planResult}
+            </pre>
           </div>
         </div>
         <div style={{ flex: 1 }}>
           <h3>AI Coach Answer:</h3>
           <div style={resultBoxStyle}>
-            <pre style={{ whiteSpace: "pre-wrap", margin: 0 }}>{coachResult}</pre>
+            <pre style={{ whiteSpace: "pre-wrap", margin: 0, color: "black" }}>
+              {coachResult}
+            </pre>
           </div>
         </div>
       </div>

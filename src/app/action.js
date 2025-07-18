@@ -43,7 +43,7 @@ export async function generatePlan(formData) {
   const weight = parseFloat(formData.get("weight"));
   const activityLevel = formData.get("activityLevel");
   const goal = formData.get("goal");
-  const durasiMinggu = parseInt(formData.get("durasi"));
+  // const durasiMinggu = parseInt(formData.get("durasi"));
 
   if (!gender) {
     throw new Error("Field 'gender' tidak lengkap atau tidak valid");
@@ -63,9 +63,9 @@ export async function generatePlan(formData) {
   if (!goal) {
     throw new Error("Field 'goal' tidak lengkap atau tidak valid");
   }
-  if (isNaN(durasiMinggu)) {
-    throw new Error("Field 'durasi' tidak lengkap atau tidak valid");
-  }
+  // if (isNaN(durasiMinggu)) {
+  //   throw new Error("Field 'durasi' tidak lengkap atau tidak valid");
+  // }
 
   const prompt = `
   Buatkan fitness plan AI berdasarkan profil berikut:
@@ -76,7 +76,6 @@ export async function generatePlan(formData) {
   - Berat sekarang: ${weight} kg
   - Aktivitas: ${activityLevel}
   - Goal: ${goal}
-  - Durasi: ${durasiMinggu} minggu
 
   Output yang diminta:
   - Ringkasan strategi
@@ -84,6 +83,7 @@ export async function generatePlan(formData) {
   - Rekomendasi meal per hari (dengan estimasi kalori)
   - Perkiraan progres tiap minggu
   - Tips tambahan sesuai kondisi
+  - Durasi program: hitungan minggu
   `;
 
   const chatCompletion = await openai.chat.completions.create({
