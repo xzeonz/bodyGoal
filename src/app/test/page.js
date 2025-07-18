@@ -1,202 +1,290 @@
 "use client";
-
 import { useState } from "react";
-import { generatePlan } from "../action";
-import { uploadDummyPhoto } from "../action";
-import { askCoach } from "../action";
+import { generatePlan, askCoach } from "../action";
 
 export default function TestPage() {
-  // AI Plan state
-  const [planInput, setPlanInput] = useState({
-    beratAwal: "",
-    beratTarget: "",
-    durasiMinggu: "",
-    goal: "cutting",
+  const [planResult, setPlanResult] = useState("");
+  const [coachResult, setCoachResult] = useState("");
+  const [form, setForm] = useState({
+    gender: "",
+    age: "",
+    height: "",
+    weight: "",
+    activityLevel: "",
+    goal: "",
+    durasi: "",
+    question: "",
+    mealName: "",
+    mealCalories: "",
+    workoutName: "",
+    workoutDuration: "",
+    updatedWeight: "",
   });
-  const [planResult, setPlanResult] = useState(null);
-  const [planError, setPlanError] = useState(null);
-  const [planLoading, setPlanLoading] = useState(false);
 
-  // Upload Photo state
-  const [uploadResult, setUploadResult] = useState(null);
-  const [uploadError, setUploadError] = useState(null);
-  const [uploadLoading, setUploadLoading] = useState(false);
+  const handleChange = (e) => {
+    setForm((prev) => ({
+      ...prev,
+      [e.target.name]: e.target.value,
+    }));
+  };
 
-  // AI Coach state
-  const [coachMessage, setCoachMessage] = useState("");
-  const [coachResult, setCoachResult] = useState(null);
-  const [coachError, setCoachError] = useState(null);
-  const [coachLoading, setCoachLoading] = useState(false);
+  const handleGeneratePlan = async () => {
+    const formData = new FormData();
+    Object.entries(form).forEach(([key, value]) => {
+      formData.append(key, value);
+    });
+    const output = await generatePlan(formData);
+    setPlanResult(output);
+  };
 
-  // Handlers
-  async function handlePlanSubmit(e) {
-    e.preventDefault();
-    setPlanLoading(true);
-    setPlanError(null);
-    setPlanResult(null);
-    try {
-      const formData = new FormData();
-      formData.append("beratAwal", planInput.beratAwal);
-      formData.append("beratTarget", planInput.beratTarget);
-      formData.append("durasiMinggu", planInput.durasiMinggu);
-      formData.append("goal", planInput.goal);
-      const res = await generatePlan(formData);
-      setPlanResult(res);
-    } catch (err) {
-      setPlanError(err.message || "Terjadi kesalahan");
-    } finally {
-      setPlanLoading(false);
-    }
-  }
-
-  async function handleUpload() {
-    setUploadLoading(true);
-    setUploadError(null);
-    setUploadResult(null);
-    try {
-      const res = await uploadDummyPhoto();
-      setUploadResult(res);
-    } catch (err) {
-      setUploadError(err.message || "Terjadi kesalahan");
-    } finally {
-      setUploadLoading(false);
-    }
-  }
-
-  async function handleCoachSubmit(e) {
-    e.preventDefault();
-    setCoachLoading(true);
-    setCoachError(null);
-    setCoachResult(null);
-    try {
-      const formData = new FormData();
-      formData.append("message", coachMessage);
-      const res = await askCoach(formData);
-      setCoachResult(res);
-    } catch (err) {
-      setCoachError(err.message || "Terjadi kesalahan");
-    } finally {
-      setCoachLoading(false);
-    }
-  }
+  const handleAskCoach = async () => {
+    const formData = new FormData();
+    Object.entries(form).forEach(([key, value]) => {
+      formData.append(key, value);
+    });
+    const output = await askCoach(formData);
+    setCoachResult(output);
+  };
 
   return (
-    <div style={{ maxWidth: 600, margin: "auto", padding: 20 }}>
-      <h1>Testing Semua Fitur</h1>
+    <div
+      style={{
+        padding: "40px",
+        maxWidth: "800px",
+        margin: "0 auto",
+        fontFamily: "Arial, sans-serif",
+        fontSize: "18px",
+        color: "#222",
+      }}
+    >
+      <h1 style={{ fontSize: "32px", marginBottom: "32px", fontWeight: "bold" }}>
+        🧪 AI Plan & Coach Tester
+      </h1>
 
-      {/* AI Plan Form */}
-      <section style={{ marginBottom: 40 }}>
-        <h2>AI Plan Generator</h2>
-        <form onSubmit={handlePlanSubmit}>
-          <label>
-            Berat Awal (kg):
-            <input
-              type="number"
-              value={planInput.beratAwal}
-              onChange={(e) =>
-                setPlanInput({ ...planInput, beratAwal: e.target.value })
-              }
-              required
-            />
+      <div
+        style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "30px" }}
+      >
+        <div>
+          <label style={{ display: "block", marginBottom: "8px", fontWeight: "600" }}>
+            Gender <span style={{ color: "red" }}>*</span>
           </label>
-          <br />
-          <label>
-            Berat Target (kg):
-            <input
-              type="number"
-              value={planInput.beratTarget}
-              onChange={(e) =>
-                setPlanInput({ ...planInput, beratTarget: e.target.value })
-              }
-              required
-            />
-          </label>
-          <br />
-          <label>
-            Durasi Minggu:
-            <input
-              type="number"
-              value={planInput.durasiMinggu}
-              onChange={(e) =>
-                setPlanInput({ ...planInput, durasiMinggu: e.target.value })
-              }
-              required
-            />
-          </label>
-          <br />
-          <label>
-            Goal:
-            <select
-              value={planInput.goal}
-              onChange={(e) =>
-                setPlanInput({ ...planInput, goal: e.target.value })
-              }
-              required
-            >
-              <option value="cutting">Cutting</option>
-              <option value="bulking">Bulking</option>
-              <option value="maintain">Maintain</option>
-            </select>
-          </label>
-          <br />
-          <button type="submit" disabled={planLoading}>
-            {planLoading ? "Loading..." : "Generate Plan"}
-          </button>
-        </form>
-        {planError && <p style={{ color: "red" }}>Error: {planError}</p>}
-        {planResult && (
-          <div style={{ marginTop: 10 }}>
-            <p>Daily Calories: {planResult.dailyCalories}</p>
-            <p>Workout Style: {planResult.workoutStyle}</p>
-            <p>Meal Type: {planResult.mealType}</p>
-          </div>
-        )}
-      </section>
+          <select
+            name="gender"
+            value={form.gender}
+            onChange={handleChange}
+            required
+            style={{ width: "100%", padding: "8px", fontSize: "16px" }}
+          >
+            <option value="">Select gender</option>
+            <option value="Male">Male</option>
+            <option value="Female">Female</option>
+          </select>
+        </div>
 
-      {/* Upload Photo */}
-      <section style={{ marginBottom: 40 }}>
-        <h2>Upload Photo</h2>
-        <button onClick={handleUpload} disabled={uploadLoading}>
-          {uploadLoading ? "Loading..." : "Upload Dummy Photo"}
+        <div>
+          <label style={{ display: "block", marginBottom: "8px", fontWeight: "600" }}>
+            Age <span style={{ color: "red" }}>*</span>
+          </label>
+          <input
+            name="age"
+            type="number"
+            value={form.age}
+            onChange={handleChange}
+            required
+            min="1"
+            style={{ width: "100%", padding: "8px", fontSize: "16px" }}
+            placeholder="Enter your age"
+          />
+        </div>
+
+        <div>
+          <label style={{ display: "block", marginBottom: "8px", fontWeight: "600" }}>
+            Height (cm) <span style={{ color: "red" }}>*</span>
+          </label>
+          <input
+            name="height"
+            type="number"
+            value={form.height}
+            onChange={handleChange}
+            required
+            min="1"
+            style={{ width: "100%", padding: "8px", fontSize: "16px" }}
+            placeholder="Enter your height in cm"
+          />
+        </div>
+
+        <div>
+          <label style={{ display: "block", marginBottom: "8px", fontWeight: "600" }}>
+            Current Weight (kg) <span style={{ color: "red" }}>*</span>
+          </label>
+          <input
+            name="weight"
+            type="number"
+            value={form.weight}
+            onChange={handleChange}
+            required
+            min="1"
+            style={{ width: "100%", padding: "8px", fontSize: "16px" }}
+            placeholder="Enter your current weight in kg"
+          />
+        </div>
+
+        <div style={{ gridColumn: "span 2" }}>
+          <label style={{ display: "block", marginBottom: "8px", fontWeight: "600" }}>
+            Activity Level <span style={{ color: "red" }}>*</span>
+          </label>
+          <select
+            name="activityLevel"
+            value={form.activityLevel}
+            onChange={handleChange}
+            required
+            style={{ width: "100%", padding: "8px", fontSize: "16px" }}
+          >
+            <option value="">Select activity level</option>
+            <option value="Sedentary">Sedentary</option>
+            <option value="Lightly active">Lightly active</option>
+            <option value="Moderately active">Moderately active</option>
+            <option value="Very active">Very active</option>
+            <option value="Extra active">Extra active</option>
+          </select>
+        </div>
+
+        <div>
+          <label style={{ display: "block", marginBottom: "8px", fontWeight: "600" }}>
+            Duration (weeks) <span style={{ color: "red" }}>*</span>
+          </label>
+          <input
+            name="durasi"
+            type="number"
+            value={form.durasi}
+            onChange={handleChange}
+            min="1"
+            placeholder="Enter duration in weeks"
+            required
+            style={{ width: "100%", padding: "8px", fontSize: "16px" }}
+          />
+        </div>
+
+        <div style={{ gridColumn: "span 2" }}>
+          <label style={{ display: "block", marginBottom: "8px", fontWeight: "600" }}>
+            Goal Prompt <span style={{ color: "red" }}>*</span>
+          </label>
+          <textarea
+            name="goal"
+            value={form.goal}
+            onChange={handleChange}
+            placeholder="Contoh: Saya ingin turun ke 60kg dalam 2 bulan."
+            rows={3}
+            required
+            style={{ width: "100%", padding: "8px", fontSize: "16px" }}
+          />
+        </div>
+
+        <div style={{ gridColumn: "span 2" }}>
+          <label style={{ display: "block", marginBottom: "8px", fontWeight: "600" }}>
+            Question for AI Coach
+          </label>
+          <textarea
+            name="question"
+            value={form.question}
+            onChange={handleChange}
+            placeholder="Contoh: Apakah saya harus kardio tiap hari?"
+            rows={3}
+            style={{ width: "100%", padding: "8px", fontSize: "16px" }}
+          />
+        </div>
+
+        <div>
+          <label>Meal Name</label>
+          <input
+            name="mealName"
+            value={form.mealName}
+            onChange={handleChange}
+          />
+        </div>
+
+        <div>
+          <label>Calories</label>
+          <input
+            name="mealCalories"
+            type="number"
+            value={form.mealCalories}
+            onChange={handleChange}
+          />
+        </div>
+
+        <div>
+          <label>Workout Name</label>
+          <input
+            name="workoutName"
+            value={form.workoutName}
+            onChange={handleChange}
+          />
+        </div>
+
+        <div>
+          <label>Workout Duration (minutes)</label>
+          <input
+            name="workoutDuration"
+            type="number"
+            value={form.workoutDuration}
+            onChange={handleChange}
+          />
+        </div>
+
+        <div style={{ gridColumn: "span 2" }}>
+          <label>Progress: Updated Weight</label>
+          <input
+            name="updatedWeight"
+            type="number"
+            value={form.updatedWeight}
+            onChange={handleChange}
+          />
+        </div>
+      </div>
+
+      <div style={{ marginTop: "24px", display: "flex", gap: "16px" }}>
+        <button onClick={handleGeneratePlan} style={buttonStyle}>
+          Generate Plan
         </button>
-        {uploadError && <p style={{ color: "red" }}>Error: {uploadError}</p>}
-        {uploadResult && (
-          <div style={{ marginTop: 10 }}>
-            <p>URL: {uploadResult.url}</p>
-            <img
-              src={uploadResult.url}
-              alt="Uploaded"
-              style={{ maxWidth: "100%", height: "auto" }}
-            />
-          </div>
-        )}
-      </section>
+        <button onClick={handleAskCoach} style={buttonStyle}>
+          Ask Coach
+        </button>
+      </div>
 
-      {/* AI Coach */}
-      <section>
-        <h2>AI Coach</h2>
-        <form onSubmit={handleCoachSubmit}>
-          <label>
-            Message:
-            <input
-              type="text"
-              value={coachMessage}
-              onChange={(e) => setCoachMessage(e.target.value)}
-              required
-            />
-          </label>
-          <br />
-          <button type="submit" disabled={coachLoading}>
-            {coachLoading ? "Loading..." : "Ask Coach"}
-          </button>
-        </form>
-        {coachError && <p style={{ color: "red" }}>Error: {coachError}</p>}
-        {coachResult && (
-          <div style={{ marginTop: 10, whiteSpace: "pre-wrap" }}>
-            {coachResult}
+      <div style={{ marginTop: "32px", display: "flex", gap: "40px" }}>
+        <div style={{ flex: 1 }}>
+          <h3>Generated Plan Result:</h3>
+          <div style={resultBoxStyle}>
+            <pre style={{ whiteSpace: "pre-wrap", margin: 0 }}>{planResult}</pre>
           </div>
-        )}
-      </section>
+        </div>
+        <div style={{ flex: 1 }}>
+          <h3>AI Coach Answer:</h3>
+          <div style={resultBoxStyle}>
+            <pre style={{ whiteSpace: "pre-wrap", margin: 0 }}>{coachResult}</pre>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
+
+const buttonStyle = {
+  padding: "12px 24px",
+  backgroundColor: "#0070f3",
+  color: "white",
+  border: "none",
+  borderRadius: "8px",
+  cursor: "pointer",
+  fontSize: "16px",
+};
+
+const resultBoxStyle = {
+  background: "#f1f1f1",
+  border: "1px solid #ccc",
+  padding: "16px",
+  maxHeight: "400px",
+  overflowY: "auto",
+  borderRadius: "6px",
+};

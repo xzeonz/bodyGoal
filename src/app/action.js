@@ -1,77 +1,95 @@
 "use server";
 
-import { openai } from "@/utils/openai";
+import OpenAI from "openai";
+
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 export async function askCoach(formData) {
-  const message = formData.get("message");
-
+  const message = formData.get("question");
   if (!message) throw new Error("Message is required");
 
-  const completion = await openai.chat.completions.create({
+  const profile = {
+    name: "User",
+    age: 25,
+    gender: "male",
+    height: 170,
+    weight: 70,
+    activityLevel: "moderately active",
+  };
+
+  const prompt = `
+  You are a fitness coach AI. Answer the user's question clearly.
+  User Profile:
+  - Name: ${profile.name}
+  - Age: ${profile.age}
+  - Gender: ${profile.gender}
+  - Height: ${profile.height} cm
+  - Weight: ${profile.weight} kg
+  - Activity Level: ${profile.activityLevel}
+  Question: ${message}`;
+
+  const chatCompletion = await openai.chat.completions.create({
     model: "gpt-3.5-turbo",
-    messages: [
-      {
-        role: "system",
-        content:
-          "You are a fitness coach who helps users achieve their body goals using diet, workout, and motivation. Always answer clearly, with optional emojis.",
-      },
-      {
-        role: "user",
-        content: message,
-      },
-    ],
+    messages: [{ role: "user", content: prompt }],
   });
 
-  return completion.choices?.[0]?.message?.content || "No response";
+  return chatCompletion.choices[0].message.content;
 }
 
 export async function generatePlan(formData) {
-  const beratAwal = Number(formData.get("beratAwal"));
-  const beratTarget = Number(formData.get("beratTarget"));
-  const durasiMinggu = Number(formData.get("durasiMinggu"));
+  const gender = formData.get("gender");
+  const age = parseInt(formData.get("age"));
+  const height = parseInt(formData.get("height"));
+  const weight = parseFloat(formData.get("weight"));
+  const activityLevel = formData.get("activityLevel");
   const goal = formData.get("goal");
+  const durasiMinggu = parseInt(formData.get("durasi"));
 
-  if (
-    !beratAwal ||
-    !beratTarget ||
-    !durasiMinggu ||
-    !goal ||
-    isNaN(beratAwal) ||
-    isNaN(beratTarget) ||
-    isNaN(durasiMinggu)
-  ) {
-    throw new Error("Field tidak lengkap atau tidak valid");
+  if (!gender) {
+    throw new Error("Field 'gender' tidak lengkap atau tidak valid");
+  }
+  if (!age || isNaN(age)) {
+    throw new Error("Field 'age' tidak lengkap atau tidak valid");
+  }
+  if (!height || isNaN(height)) {
+    throw new Error("Field 'height' tidak lengkap atau tidak valid");
+  }
+  if (!weight || isNaN(weight)) {
+    throw new Error("Field 'weight' tidak lengkap atau tidak valid");
+  }
+  if (!activityLevel) {
+    throw new Error("Field 'activityLevel' tidak lengkap atau tidak valid");
+  }
+  if (!goal) {
+    throw new Error("Field 'goal' tidak lengkap atau tidak valid");
+  }
+  if (isNaN(durasiMinggu)) {
+    throw new Error("Field 'durasi' tidak lengkap atau tidak valid");
   }
 
-  const defisitKalori =
-    goal === "cutting" ? 0.8 : goal === "bulking" ? 1.15 : 1;
-  const bmr = beratAwal * 24;
-  const dailyCalories = Math.round(bmr * defisitKalori);
+  const prompt = `
+  Buatkan fitness plan AI berdasarkan profil berikut:
 
-  const workoutStyle =
-    goal === "cutting"
-      ? "HIIT"
-      : goal === "bulking"
-      ? "Strength Training"
-      : "Balanced";
+  - Gender: ${gender}
+  - Usia: ${age} tahun
+  - Tinggi: ${height} cm
+  - Berat sekarang: ${weight} kg
+  - Aktivitas: ${activityLevel}
+  - Goal: ${goal}
+  - Durasi: ${durasiMinggu} minggu
 
-  const mealType =
-    goal === "cutting"
-      ? "High protein, low carb"
-      : goal === "bulking"
-      ? "High carb, calorie dense"
-      : "Balanced meal";
+  Output yang diminta:
+  - Ringkasan strategi
+  - Workout plan mingguan
+  - Rekomendasi meal per hari (dengan estimasi kalori)
+  - Perkiraan progres tiap minggu
+  - Tips tambahan sesuai kondisi
+  `;
 
-  return {
-    dailyCalories,
-    workoutStyle,
-    mealType,
-  };
-}
+  const chatCompletion = await openai.chat.completions.create({
+    model: "gpt-3.5-turbo",
+    messages: [{ role: "user", content: prompt }],
+  });
 
-export async function uploadDummyPhoto() {
-  // Simulasi upload ke Cloudflare R2, kembalikan URL dummy
-  const url =
-    "https://www.unsulbarnews.com/wp-content/uploads/2023/11/WhatsApp-Image-2023-11-12-at-08.38.20.jpeg";
-  return { url };
+  return chatCompletion.choices[0].message.content;
 }
