@@ -175,21 +175,18 @@ Make sure total meal calories approximately match target calories.`,
     const aiPlan = JSON.parse(completion.choices[0].message.content);
     
     // Convert AI plan to string format for to-do lists
-    const mealPlanString = aiPlan.mealPlan.map(meal => `${meal.name} (${meal.calories} cal)`).join('\n');
-    const workoutPlanString = aiPlan.workoutPlan.map(workout => `${workout.name} (${workout.duration} min)`).join('\n');
-    
     // Save AI plan to database
     await prisma.aiPlan.upsert({
       where: { userId: session.user.id },
       update: {
-        mealPlan: mealPlanString,
-        workoutPlan: workoutPlanString,
+        mealPlan: JSON.stringify(aiPlan.mealPlan),
+        workoutPlan: JSON.stringify(aiPlan.workoutPlan),
         generatedAt: new Date(),
       },
       create: {
         userId: session.user.id,
-        mealPlan: mealPlanString,
-        workoutPlan: workoutPlanString,
+        mealPlan: JSON.stringify(aiPlan.mealPlan),
+        workoutPlan: JSON.stringify(aiPlan.workoutPlan),
         generatedAt: new Date(),
       },
     });
@@ -295,11 +292,13 @@ async function askCoach(formData) {
   "use server";
   const session = await getSession();
   if (!session?.user) {
-    redirect("/login");
+    throw new Error("User not authenticated");
   }
 
   const message = formData.get("message");
-  if (!message) return;
+  if (!message) {
+    throw new Error("Message is required");
+  }
 
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
@@ -352,13 +351,11 @@ User Question: ${message}`,
     });
 
     const response = completion.choices[0].message.content;
-    
-    // Store the conversation in session or database if needed
-    // For now, we'll just redirect back with the response
-    redirect(`/dashboard?tab=coach&response=${encodeURIComponent(response)}`);
+
+    return { success: true, response };
   } catch (error) {
     console.error("AI Coach failed:", error);
-    redirect("/dashboard?tab=coach&error=true");
+    return { success: false, error: error.message || "Unknown error" };
   }
 }
 
@@ -1292,21 +1289,21 @@ export default async function Dashboard({ searchParams }) {
             </div>
 
             {/* Display AI Response */}
-            {searchParams?.response && (
+            {params?.response && (
               <div className="bg-white p-6 rounded-lg shadow border-l-4 border-blue-500">
                 <h4 className="text-lg font-semibold text-gray-700 mb-3 flex items-center">
                   🤖 Coach Response
                 </h4>
                 <div className="prose prose-sm max-w-none">
                   <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">
-                    {decodeURIComponent(searchParams.response)}
+                    {decodeURIComponent(params.response)}
                   </p>
                 </div>
               </div>
             )}
 
             {/* Error Message */}
-            {searchParams?.error && (
+            {params?.error && (
               <div className="bg-red-50 p-4 rounded-lg border border-red-200">
                 <p className="text-red-700">
                   Sorry, I'm having trouble right now. Please try again later.

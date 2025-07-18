@@ -399,70 +399,157 @@ export async function testOpenAIKey() {
   }
 }
 export async function askCoach(formData) {
-  const message = formData.get("message");
+  const question = formData.get("question");
+  if (!question) throw new Error("Question is required");
 
-  if (!message) throw new Error("Message is required");
+  // Example user profile - you can extend this to fetch real user data if needed
+  const profile = {
+    name: "User",
+    age: 25,
+    gender: "male",
+    height: 170,
+    weight: 70,
+    activityLevel: "moderately active",
+  };
+
+  const prompt = `
+You are a fitness coach AI. Answer the user's question clearly.
+User Profile:
+- Name: ${profile.name}
+- Age: ${profile.age}
+- Gender: ${profile.gender}
+- Height: ${profile.height} cm
+- Weight: ${profile.weight} kg
+- Activity Level: ${profile.activityLevel}
+Question: ${question}`;
 
   const completion = await openai.chat.completions.create({
     model: "gpt-3.5-turbo",
-    messages: [
-      {
-        role: "system",
-        content:
-          "You are a fitness coach who helps users achieve their body goals using diet, workout, and motivation. Always answer clearly, with optional emojis.",
-      },
-      {
-        role: "user",
-        content: message,
-      },
-    ],
+    messages: [{ role: "user", content: prompt }],
   });
 
   return completion.choices?.[0]?.message?.content || "No response";
 }
 
 export async function generatePlan(formData) {
-  const beratAwal = Number(formData.get("beratAwal"));
-  const beratTarget = Number(formData.get("beratTarget"));
-  const durasiMinggu = Number(formData.get("durasiMinggu"));
-  const goal = formData.get("goal");
-
-  if (
-    !beratAwal ||
-    !beratTarget ||
-    !durasiMinggu ||
-    !goal ||
-    isNaN(beratAwal) ||
-    isNaN(beratTarget) ||
-    isNaN(durasiMinggu)
-  ) {
-    throw new Error("Field tidak lengkap atau tidak valid");
+  const session = await getSession();
+  if (!session?.user) {
+    throw new Error("User not authenticated");
   }
 
-  const defisitKalori =
-    goal === "cutting" ? 0.8 : goal === "bulking" ? 1.15 : 1;
-  const bmr = beratAwal * 24;
-  const dailyCalories = Math.round(bmr * defisitKalori);
+  const gender = formData.get("gender");
+  const age = parseInt(formData.get("age"));
+  const height = parseInt(formData.get("height"));
+  const weight = parseFloat(formData.get("weight"));
+  const activityLevel = formData.get("activityLevel");
+  const goal = formData.get("goal");
+  const durasiMinggu = parseInt(formData.get("durasiMinggu"));
 
-  const workoutStyle =
-    goal === "cutting"
-      ? "HIIT"
-      : goal === "bulking"
-      ? "Strength Training"
-      : "Balanced";
+  if (!gender) {
+    throw new Error("Field 'gender' tidak lengkap atau tidak valid");
+  }
+  if (!age || isNaN(age)) {
+    throw new Error("Field 'age' tidak lengkap atau tidak valid");
+  }
+  if (!height || isNaN(height)) {
+    throw new Error("Field 'height' tidak lengkap atau tidak valid");
+  }
+  if (!weight || isNaN(weight)) {
+    throw new Error("Field 'weight' tidak lengkap atau tidak valid");
+  }
+  if (!activityLevel) {
+    throw new Error("Field 'activityLevel' tidak lengkap atau tidak valid");
+  }
+  if (!goal) {
+    throw new Error("Field 'goal' tidak lengkap atau tidak valid");
+  }
+  if (!durasiMinggu || isNaN(durasiMinggu)) {
+    throw new Error("Field 'durasiMinggu' tidak lengkap atau tidak valid");
+  }
 
-  const mealType =
-    goal === "cutting"
-      ? "High protein, low carb"
-      : goal === "bulking"
-      ? "High carb, calorie dense"
-      : "Balanced meal";
+  const prompt = `
+You are a professional fitness and nutrition coach. Create a personalized weekly fitness plan based on the following user profile. Return ONLY a JSON object with this exact structure:
 
-  return {
-    dailyCalories,
-    workoutStyle,
-    mealType,
-  };
+{
+  "strategySummary": "string",
+  "weeklyWorkoutPlan": [
+    {"day": "Monday", "exercises": [{"name": "string", "duration": number, "description": "string"}]},
+    {"day": "Tuesday", "exercises": [{"name": "string", "duration": number, "description": "string"}]},
+    {"day": "Wednesday", "exercises": [{"name": "string", "duration": number, "description": "string"}]},
+    {"day": "Thursday", "exercises": [{"name": "string", "duration": number, "description": "string"}]},
+    {"day": "Friday", "exercises": [{"name": "string", "duration": number, "description": "string"}]},
+    {"day": "Saturday", "exercises": [{"name": "string", "duration": number, "description": "string"}]},
+    {"day": "Sunday", "exercises": [{"name": "string", "duration": number, "description": "string"}]}
+  ],
+  "dailyMealRecommendations": [
+    {"meal": "Breakfast", "calories": number, "description": "string"},
+    {"meal": "Lunch", "calories": number, "description": "string"},
+    {"meal": "Dinner", "calories": number, "description": "string"},
+    {"meal": "Snack", "calories": number, "description": "string"}
+  ],
+  "weeklyProgressEstimation": "string",
+  "additionalTips": "string",
+  "programDurationWeeks": number
+}
+
+User Profile:
+- Gender: ${gender}
+- Age: ${age}
+- Height: ${height} cm
+- Current Weight: ${weight} kg
+- Activity Level: ${activityLevel}
+- Goal: ${goal}
+- Program Duration: ${durasiMinggu} weeks
+`;
+
+  const completion = await openai.chat.completions.create({
+    model: "gpt-3.5-turbo",
+    messages: [{ role: "user", content: prompt }],
+    temperature: 0.7,
+  });
+
+  let aiPlanContent = completion.choices?.[0]?.message?.content || null;
+  if (!aiPlanContent) {
+    throw new Error("AI did not return a plan");
+  }
+
+  let aiPlan;
+  try {
+    aiPlan = JSON.parse(aiPlanContent);
+  } catch (error) {
+    throw new Error("Failed to parse AI plan JSON: " + error.message);
+  }
+
+  // Save AI plan to database
+  await prisma.aiPlan.upsert({
+    where: { userId: session.user.id },
+    update: {
+      mealPlan: JSON.stringify(aiPlan.dailyMealRecommendations),
+      workoutPlan: JSON.stringify(aiPlan.weeklyWorkoutPlan),
+      strategySummary: aiPlan.strategySummary,
+      weeklyProgressEstimation: aiPlan.weeklyProgressEstimation,
+      additionalTips: aiPlan.additionalTips,
+      programDurationWeeks: aiPlan.programDurationWeeks,
+      generatedAt: new Date(),
+    },
+    create: {
+      userId: session.user.id,
+      mealPlan: JSON.stringify(aiPlan.dailyMealRecommendations),
+      workoutPlan: JSON.stringify(aiPlan.weeklyWorkoutPlan),
+      strategySummary: aiPlan.strategySummary,
+      weeklyProgressEstimation: aiPlan.weeklyProgressEstimation,
+      additionalTips: aiPlan.additionalTips,
+      programDurationWeeks: aiPlan.programDurationWeeks,
+      generatedAt: new Date(),
+    },
+  });
+
+  console.log("✅ AI Plan saved successfully for user:", session.user.id);
+
+  // Revalidate dashboard path to refresh UI cache
+  revalidatePath("/dashboard");
+
+  return aiPlan;
 }
 
 export async function addMealLog(formData) {
