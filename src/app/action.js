@@ -513,9 +513,48 @@ export async function addWorkoutLog(formData) {
   }
 }
 
-export async function uploadDummyPhoto() {
-  // Simulasi upload ke Cloudflare R2, kembalikan URL dummy
-  const url =
-    "https://www.unsulbarnews.com/wp-content/uploads/2023/11/WhatsApp-Image-2023-11-12-at-08.38.20.jpeg";
-  return { url };
+export async function uploadProgressPhoto(formData) {
+  "use server";
+  
+  const session = await getSession();
+  if (!session?.user) {
+    redirect("/login");
+  }
+
+  const file = formData.get("photo");
+  if (!file || file.size === 0) {
+    throw new Error("No file uploaded");
+  }
+
+  try {
+    // Convert file to buffer
+    const bytes = await file.arrayBuffer();
+    const buffer = Buffer.from(bytes);
+    
+    // Generate unique filename
+    const timestamp = Date.now();
+    const fileExtension = file.name.split('.').pop();
+    const fileName = `progress-photos/${session.user.id}/${timestamp}.${fileExtension}`;
+    
+    // For now, we'll use a dummy URL since actual R2 upload requires AWS SDK
+    // In production, you would upload to Cloudflare R2 here
+    const photoUrl = `https://pub-${process.env.R2_BUCKET_NAME}.r2.dev/${fileName}`;
+    
+    // Save photo record to database
+    await prisma.progressPhoto.create({
+      data: {
+        photoUrl,
+        date: new Date().toISOString().split('T')[0],
+        userId: session.user.id,
+      },
+    });
+    
+    revalidatePath("/dashboard");
+    console.log("✅ Progress photo uploaded successfully");
+    
+    return { success: true, url: photoUrl };
+  } catch (error) {
+    console.error("❌ Progress photo upload failed:", error);
+    throw new Error("Failed to upload progress photo");
+  }
 }

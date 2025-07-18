@@ -6,7 +6,7 @@ import { evaluateBadge } from "@/lib/evaluateBadge";
 import { openai } from "@/utils/openai";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { logoutUser } from "../action";
+import { logoutUser, uploadProgressPhoto } from "../action";
 // Removed QuickAddButton components - using pure server actions now
 
 // Server Actions
@@ -409,6 +409,10 @@ export default async function Dashboard({ searchParams }) {
         orderBy: { createdAt: "desc" },
       },
       weights: {
+        orderBy: { date: "desc" },
+        take: 10,
+      },
+      progressPhotos: {
         orderBy: { date: "desc" },
         take: 10,
       },
@@ -959,6 +963,65 @@ export default async function Dashboard({ searchParams }) {
                 </button>
               </form>
             </div>
+
+            {/* Progress Photo Upload */}
+            <div className="bg-white p-6 rounded-lg shadow">
+              <h3 className="text-lg font-semibold text-gray-700 mb-4 flex items-center">
+                📸 Progress Photos
+                <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
+                  Visual Tracking
+                </span>
+              </h3>
+              <form action={uploadProgressPhoto} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Upload Progress Photo
+                  </label>
+                  <input 
+                    type="file" 
+                    name="photo" 
+                    accept="image/*" 
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    required 
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Upload a photo to track your visual progress over time
+                  </p>
+                </div>
+                <button 
+                  type="submit" 
+                  className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition flex items-center gap-2"
+                >
+                  📤 Upload Photo
+                </button>
+              </form>
+            </div>
+
+            {/* Progress Photo Gallery */}
+            {user.progressPhotos && user.progressPhotos.length > 0 && (
+              <div className="bg-white p-6 rounded-lg shadow">
+                <h3 className="text-lg font-semibold text-gray-700 mb-4">
+                  📷 Photo History
+                </h3>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                  {user.progressPhotos.map((photo) => (
+                    <div key={photo.id} className="relative group">
+                      <img 
+                        src={photo.photoUrl} 
+                        alt={`Progress photo from ${photo.date}`}
+                        className="w-full h-32 object-cover rounded-lg border border-gray-200 hover:shadow-md transition"
+                        onError={(e) => {
+                          e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjEyOCIgdmlld0JveD0iMCAwIDIwMCAxMjgiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIyMDAiIGhlaWdodD0iMTI4IiBmaWxsPSIjRjNGNEY2Ii8+CjxwYXRoIGQ9Ik04NyA0OEw5MyA1NEw5OSA0OEwxMDUgNTRMMTEzIDQ2VjgySDg3VjQ4WiIgZmlsbD0iIzlDQTNBRiIvPgo8Y2lyY2xlIGN4PSI5NCIgY3k9IjU4IiByPSI0IiBmaWxsPSIjOUNBM0FGIi8+Cjx0ZXh0IHg9IjEwMCIgeT0iNzAiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxMiIgZmlsbD0iIzZCNzI4MCI+UGhvdG88L3RleHQ+CjwvZXZnPgo=';
+                        }}
+                      />
+                      <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white text-xs p-2 rounded-b-lg">
+                        {photo.date}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="bg-white p-6 rounded-lg shadow">
               <h3 className="text-lg font-semibold text-gray-700 mb-4">

@@ -20,6 +20,7 @@ model User {
   weights     Weight[]
   onboarding  Onboarding?
   aiPlan      AiPlan?
+  progressPhotos ProgressPhoto[]
 }
 model Onboarding {
   id            String @id @default(cuid())
@@ -73,4 +74,14 @@ model AiPlan {
   
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId      String   @unique
+}
+
+model ProgressPhoto {
+  id        String   @id @default(cuid())
+  photoUrl  String
+  date      String
+  createdAt DateTime @default(now())
+  
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
 }
