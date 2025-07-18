@@ -6,6 +6,7 @@ import { evaluateBadge } from "@/lib/evaluateBadge";
 import { openai } from "@/utils/openai";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { logoutUser } from "../action";
 
 // Server Actions
 async function addWeight(formData) {
@@ -514,9 +515,20 @@ export default async function Dashboard({ searchParams }) {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-6xl mx-auto p-6">
-        <h1 className="text-3xl font-bold text-gray-900 mb-8">
-          BodyGoal Dashboard - {user.name}
-        </h1>
+        {/* Header with Logout */}
+        <div className="flex justify-between items-center mb-8">
+          <h1 className="text-3xl font-bold text-gray-900">
+            BodyGoal Dashboard - {user.name}
+          </h1>
+          <form action={logoutUser}>
+            <button 
+              type="submit"
+              className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition flex items-center gap-2"
+            >
+              🚪 Logout
+            </button>
+          </form>
+        </div>
 
         {/* Tab Navigation */}
         <div className="bg-white rounded-lg shadow mb-6">
