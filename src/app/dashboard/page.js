@@ -441,15 +441,19 @@ export default async function Dashboard({ searchParams }) {
   const totalWorkouts = todayWorkouts.length;
   const badge = evaluateBadge(totalCalories, targetCalories, totalWorkouts);
 
-  // Parse AI plans
+  // Parse AI plans - handle both string and JSON formats
   let aiMealPlan = [];
   let aiWorkoutPlan = [];
   if (user.aiPlan) {
     try {
+      // Try to parse as JSON first (new format)
       aiMealPlan = JSON.parse(user.aiPlan.mealPlan);
       aiWorkoutPlan = JSON.parse(user.aiPlan.workoutPlan);
     } catch (e) {
-      console.error("Failed to parse AI plans:", e);
+      // If JSON parse fails, treat as string format (old format)
+      console.log("Using string format for AI plans");
+      aiMealPlan = [];
+      aiWorkoutPlan = [];
     }
   }
 
@@ -981,7 +985,7 @@ export default async function Dashboard({ searchParams }) {
         {activeTab === "meals" && (
           <div className="space-y-6">
             {/* Daily Meal To-Do List */}
-            {user.aiPlan?.mealPlan && (
+            {aiMealPlan.length > 0 && (
               <div className="bg-gradient-to-r from-green-50 to-emerald-50 p-6 rounded-lg border border-green-200">
                 <h3 className="text-lg font-semibold text-gray-700 mb-4 flex items-center">
                   📋 Today's Meal Plan
@@ -990,8 +994,8 @@ export default async function Dashboard({ searchParams }) {
                   </span>
                 </h3>
                 <div className="space-y-3">
-                  {user.aiPlan.mealPlan.split('\n').filter(line => line.trim()).map((meal, index) => {
-                    const mealName = meal.replace(/^[\d\-\*\s]+/, '').trim();
+                  {aiMealPlan.map((meal, index) => {
+                    const mealName = meal.name;
                     const isCompleted = todayMeals.some(m => m.name.toLowerCase().includes(mealName.toLowerCase().split(' ')[0]));
                     
                     return (
@@ -1004,13 +1008,14 @@ export default async function Dashboard({ searchParams }) {
                         />
                         <div className="flex-1">
                           <p className={`text-sm ${isCompleted ? 'text-green-800 line-through' : 'text-gray-700'}`}>
-                            {mealName}
+                            {mealName} - {meal.calories} cal
                           </p>
+                          <p className="text-xs text-gray-500">{meal.description}</p>
                         </div>
                         {!isCompleted && (
                           <form action={addMeal} className="inline">
                             <input type="hidden" name="name" value={mealName} />
-                            <input type="hidden" name="calories" value="300" />
+                            <input type="hidden" name="calories" value={meal.calories} />
                             <button 
                               type="submit"
                               className="text-xs bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded-full transition"
@@ -1127,7 +1132,7 @@ export default async function Dashboard({ searchParams }) {
         {activeTab === "workouts" && (
           <div className="space-y-6">
             {/* Daily Workout To-Do List */}
-            {user.aiPlan?.workoutPlan && (
+            {aiWorkoutPlan.length > 0 && (
               <div className="bg-gradient-to-r from-purple-50 to-pink-50 p-6 rounded-lg border border-purple-200">
                 <h3 className="text-lg font-semibold text-gray-700 mb-4 flex items-center">
                   🏋️ Today's Workout Plan
@@ -1136,8 +1141,8 @@ export default async function Dashboard({ searchParams }) {
                   </span>
                 </h3>
                 <div className="space-y-3">
-                  {user.aiPlan.workoutPlan.split('\n').filter(line => line.trim()).map((workout, index) => {
-                    const workoutName = workout.replace(/^[\d\-\*\s]+/, '').trim();
+                  {aiWorkoutPlan.map((workout, index) => {
+                    const workoutName = workout.name;
                     const isCompleted = todayWorkouts.some(w => w.name.toLowerCase().includes(workoutName.toLowerCase().split(' ')[0]));
                     
                     return (
@@ -1150,13 +1155,14 @@ export default async function Dashboard({ searchParams }) {
                         />
                         <div className="flex-1">
                           <p className={`text-sm ${isCompleted ? 'text-purple-800 line-through' : 'text-gray-700'}`}>
-                            {workoutName}
+                            {workoutName} - {workout.duration} min
                           </p>
+                          <p className="text-xs text-gray-500">{workout.description}</p>
                         </div>
                         {!isCompleted && (
                           <form action={addWorkout} className="inline">
                             <input type="hidden" name="name" value={workoutName} />
-                            <input type="hidden" name="duration" value="30" />
+                            <input type="hidden" name="duration" value={workout.duration} />
                             <button 
                               type="submit"
                               className="text-xs bg-purple-500 hover:bg-purple-600 text-white px-3 py-1 rounded-full transition"
