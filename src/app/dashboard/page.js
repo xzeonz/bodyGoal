@@ -7,6 +7,7 @@ import { openai } from "@/utils/openai";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { logoutUser } from "../action";
+// Removed QuickAddButton components - using pure server actions now
 
 // Server Actions
 async function addWeight(formData) {
@@ -1007,27 +1008,16 @@ export default async function Dashboard({ searchParams }) {
                           </p>
                         </div>
                         {!isCompleted && (
-                          <button 
-                            onClick={() => {
-                              const form = document.createElement('form');
-                              form.style.display = 'none';
-                              const nameInput = document.createElement('input');
-                              nameInput.name = 'name';
-                              nameInput.value = mealName;
-                              const caloriesInput = document.createElement('input');
-                              caloriesInput.name = 'calories';
-                              caloriesInput.value = '300';
-                              form.appendChild(nameInput);
-                              form.appendChild(caloriesInput);
-                              document.body.appendChild(form);
-                              const formData = new FormData(form);
-                              addMeal(formData);
-                              document.body.removeChild(form);
-                            }}
-                            className="text-xs bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded-full transition"
-                          >
-                            Quick Add
-                          </button>
+                          <form action={addMeal} className="inline">
+                            <input type="hidden" name="name" value={mealName} />
+                            <input type="hidden" name="calories" value="300" />
+                            <button 
+                              type="submit"
+                              className="text-xs bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded-full transition"
+                            >
+                              Quick Add
+                            </button>
+                          </form>
                         )}
                         {isCompleted && (
                           <span className="text-xs text-green-600 font-medium">✓ Done</span>
@@ -1164,27 +1154,16 @@ export default async function Dashboard({ searchParams }) {
                           </p>
                         </div>
                         {!isCompleted && (
-                          <button 
-                            onClick={() => {
-                              const form = document.createElement('form');
-                              form.style.display = 'none';
-                              const nameInput = document.createElement('input');
-                              nameInput.name = 'name';
-                              nameInput.value = workoutName;
-                              const durationInput = document.createElement('input');
-                              durationInput.name = 'duration';
-                              durationInput.value = '30';
-                              form.appendChild(nameInput);
-                              form.appendChild(durationInput);
-                              document.body.appendChild(form);
-                              const formData = new FormData(form);
-                              addWorkout(formData);
-                              document.body.removeChild(form);
-                            }}
-                            className="text-xs bg-purple-500 hover:bg-purple-600 text-white px-3 py-1 rounded-full transition"
-                          >
-                            Quick Add
-                          </button>
+                          <form action={addWorkout} className="inline">
+                            <input type="hidden" name="name" value={workoutName} />
+                            <input type="hidden" name="duration" value="30" />
+                            <button 
+                              type="submit"
+                              className="text-xs bg-purple-500 hover:bg-purple-600 text-white px-3 py-1 rounded-full transition"
+                            >
+                              Quick Add
+                            </button>
+                          </form>
                         )}
                         {isCompleted && (
                           <span className="text-xs text-purple-600 font-medium">✓ Done</span>
