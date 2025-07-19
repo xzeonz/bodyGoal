@@ -24,12 +24,9 @@ export default async function DashboardLayout({ children }) {
     redirect("/login");
   }
 
-  // Redirect logic, sekarang di layout agar berlaku untuk semua tab
   if (!user.onboarding) {
-    // Jika belum onboarding, paksa ke halaman plan
     redirect("/dashboard/plan?onboarding=true");
   } else if (!user.aiPlan) {
-    // Jika sudah onboarding tapi belum generate plan, paksa ke halaman plan
     redirect("/dashboard/plan?generate=true");
   }
 

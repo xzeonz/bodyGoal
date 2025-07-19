@@ -16,8 +16,7 @@ export default async function PlanPage({ searchParams }) {
   });
 
   if (!user) redirect("/login");
-
-  // Logika redirect yang spesifik untuk halaman ini dipindahkan dari layout
+  
   if (!user.onboarding && searchParams.onboarding !== "true") {
     redirect("/dashboard/plan?onboarding=true");
   }

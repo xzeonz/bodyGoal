@@ -5,7 +5,6 @@ import { getToday } from "@/lib/getToday";
 import { evaluateBadge } from "@/lib/evaluateBadge";
 import { generateAISuggestions } from "../../action.js";
 
-// Helper function ini mungkin sudah ada di lib Anda, jika tidak, definisikan di sini atau di lib
 function calculateCalories(weight, height, age, gender, activityLevel, goal) {
   let bmr;
   if (gender === "male") bmr = 10 * weight + 6.25 * height - 5 * age + 5;

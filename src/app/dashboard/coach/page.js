@@ -1,6 +1,5 @@
 import { askCoach } from "../../action.js";
 
-// Karena komponen ini membaca searchParams, ia harus tetap menjadi Server Component
 export default function CoachPage({ searchParams }) {
   return (
     <div className="space-y-6">

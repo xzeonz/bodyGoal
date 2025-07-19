@@ -12,7 +12,6 @@ import { cookies } from "next/headers";
 // HELPERS
 // =================================================================
 
-// Menggunakan versi detail dari file action.js baru
 function calculateCalories(weight, height, age, gender, activityLevel, goal) {
   let bmr;
   if (gender === "male") {
@@ -60,7 +59,7 @@ function getFallbackSuggestions(suggestionType) {
 }
 
 // =================================================================
-// AUTH & ONBOARDING ACTIONS (dari action.js baru)
+// AUTH & ONBOARDING ACTION
 // =================================================================
 
 export async function registerUser(formData) {
@@ -74,7 +73,7 @@ export async function registerUser(formData) {
   }
 
   await prisma.user.create({
-    data: { name, email, password }, // Password masih plain text sesuai permintaan
+    data: { name, email, password },
   });
 
   redirect("/onboarding");
@@ -98,7 +97,7 @@ export async function loginUser(formData) {
     {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      maxAge: 60 * 60 * 24 * 7, // 7 hari
+      maxAge: 60 * 60 * 24 * 7, 
       sameSite: "lax",
     }
   );
@@ -116,11 +115,10 @@ export async function loginUser(formData) {
 }
 
 export async function logoutUser() {
-  await authLogout(); // Menggunakan fungsi logout dari lib/auth
+  await authLogout(); 
   redirect("/login");
 }
 
-// Menyimpan data onboarding langkah pertama
 export async function saveOnboardingData(formData) {
   const session = await getSession();
   if (!session?.user) redirect("/login");
@@ -138,17 +136,15 @@ export async function saveOnboardingData(formData) {
     });
   } catch (error) {
     console.error("Save Onboarding Data failed:", error);
-    // Mungkin redirect ke halaman error
     return;
   }
   redirect("/onboarding/goal");
 }
 
 // =================================================================
-// DASHBOARD ACTIONS (Gabungan terbaik dari kedua file)
+// DASHBOARD ACTIONS
 // =================================================================
 
-// Menggunakan nama standar 'addMeal' dengan logic dari 'logMeal'
 export async function addMeal(formData) {
   const session = await getSession();
   if (!session?.user) return;
@@ -165,12 +161,10 @@ export async function addMeal(formData) {
       date: getToday(),
     },
   });
-  // Revalidate path yang relevan dengan struktur baru
   revalidatePath("/dashboard/meals");
   revalidatePath("/dashboard/overview");
 }
 
-// Menggunakan nama standar 'addWorkout' dengan logic dari 'logWorkout'
 export async function addWorkout(formData) {
   const session = await getSession();
   if (!session?.user) return;
@@ -191,7 +185,6 @@ export async function addWorkout(formData) {
   revalidatePath("/dashboard/overview");
 }
 
-// Menggunakan nama standar 'addWeight' dengan logic dari 'logWeight'
 export async function addWeight(formData) {
   const session = await getSession();
   if (!session?.user) return;
@@ -210,13 +203,11 @@ export async function addWeight(formData) {
   revalidatePath("/dashboard/overview");
 }
 
-// Versi `generateAIPlan` yang sesuai dengan UI dashboard (dari dashboard/page.js)
 export async function generateAIPlan(formData) {
   const session = await getSession();
   if (!session?.user) return;
 
-  const isOnboarding = formData.get("age"); // Cek apakah ini dari form onboarding
-
+  const isOnboarding = formData.get("age"); 
   if (isOnboarding) {
     await prisma.onboarding.upsert({
       where: { userId: session.user.id },
@@ -290,7 +281,7 @@ export async function generateAIPlan(formData) {
       },
     });
 
-    revalidatePath("/dashboard", "layout"); // Revalidate seluruh layout dashboard
+    revalidatePath("/dashboard", "layout");
 
     if (isOnboarding) {
       redirect("/dashboard/plan?generated=true");
@@ -300,7 +291,6 @@ export async function generateAIPlan(formData) {
   }
 }
 
-// Versi `askCoach` yang detail dan menggunakan data user (dari dashboard/page.js)
 export async function askCoach(formData) {
   const session = await getSession();
   if (!session?.user) redirect("/login");
@@ -367,7 +357,6 @@ User Question: ${message}`,
   }
 }
 
-// Aksi untuk suggestion, diperlukan oleh beberapa halaman
 export async function generateAISuggestions(
   userData,
   currentData,
