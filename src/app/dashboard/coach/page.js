@@ -1,6 +1,8 @@
 import { askCoach } from "../../action.js";
 
-export default async function CoachPage({ searchParams }) { 
+export default async function CoachPage({ searchParams }) {
+  const resolvedSearchParams = await searchParams;
+
   return (
     <div className="space-y-6">
       <div className="bg-gradient-to-r from-indigo-50 to-purple-50 p-6 rounded-lg border border-indigo-200">
@@ -11,31 +13,32 @@ export default async function CoachPage({ searchParams }) {
           </span>
         </h3>
         <p className="text-gray-600 mb-4">
-          Ask your AI coach anything about fitness, nutrition, motivation, or your progress. 
-          I have access to your profile and recent activity to provide personalized advice.
+          Ask your AI coach anything about fitness, nutrition, motivation, or
+          your progress. I have access to your profile and recent activity to
+          provide personalized advice.
         </p>
       </div>
 
       {/* Display AI Response */}
-      {searchParams?.response && (
+      {resolvedSearchParams?.response && (
         <div className="bg-white p-6 rounded-lg shadow border-l-4 border-blue-500">
           <h4 className="text-lg font-semibold text-gray-700 mb-3 flex items-center">
             🤖 Coach Response
           </h4>
           <div className="prose prose-sm max-w-none">
             <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">
-              {decodeURIComponent(searchParams.response)}
+              {decodeURIComponent(resolvedSearchParams.response)}
             </p>
           </div>
         </div>
       )}
 
       {/* Error Message */}
-      {searchParams?.error && (
+      {resolvedSearchParams?.error && (
         <div className="bg-red-50 p-4 rounded-lg border border-red-200">
           <p className="text-red-700">
             Sorry, I'm having trouble right now. Error:{" "}
-            {decodeURIComponent(searchParams.error)}
+            {decodeURIComponent(resolvedSearchParams.error)}
           </p>
         </div>
       )}
@@ -79,7 +82,7 @@ export default async function CoachPage({ searchParams }) {
             "How to stay motivated?",
             "Am I on track with my goals?",
             "What should I eat before workout?",
-            "How to track progress better?"
+            "How to track progress better?",
           ].map((question, index) => (
             <form key={index} action={askCoach} className="inline">
               <input type="hidden" name="message" value={question} />
