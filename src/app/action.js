@@ -97,7 +97,7 @@ export async function loginUser(formData) {
     {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      maxAge: 60 * 60 * 24 * 7, 
+      maxAge: 60 * 60 * 24 * 7,
       sameSite: "lax",
     }
   );
@@ -115,7 +115,7 @@ export async function loginUser(formData) {
 }
 
 export async function logoutUser() {
-  await authLogout(); 
+  await authLogout();
   redirect("/login");
 }
 
@@ -207,7 +207,7 @@ export async function generateAIPlan(formData) {
   const session = await getSession();
   if (!session?.user) return;
 
-  const isOnboarding = formData.get("age"); 
+  const isOnboarding = formData.get("age");
   if (isOnboarding) {
     await prisma.onboarding.upsert({
       where: { userId: session.user.id },
@@ -297,35 +297,38 @@ export async function askCoach(formData) {
 
   const message = formData.get("message");
   if (!message) {
-    redirect("/dashboard/coach?error=No+message+provided");
+    redirect("/dashboard/coach?error=Message+is+required");
     return;
   }
 
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    include: {
-      onboarding: true,
-      meals: {
-        where: { date: getToday() },
-        orderBy: { createdAt: "desc" },
-        take: 5,
-      },
-      workouts: {
-        where: { date: getToday() },
-        orderBy: { createdAt: "desc" },
-        take: 5,
-      },
-      weights: { orderBy: { date: "desc" }, take: 3 },
-    },
-  });
+  let aiResponse = null;
+  let aiError = null;
 
   try {
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      include: {
+        onboarding: true,
+        meals: {
+          where: { date: getToday() },
+          orderBy: { createdAt: "desc" },
+          take: 5,
+        },
+        workouts: {
+          where: { date: getToday() },
+          orderBy: { createdAt: "desc" },
+          take: 5,
+        },
+        weights: { orderBy: { date: "desc" }, take: 3 },
+      },
+    });
+
     const completion = await openai.chat.completions.create({
       model: "gpt-3.5-turbo",
       messages: [
         {
           role: "system",
-          content: `You are a professional fitness and nutrition coach. Use the user's data to provide helpful, personalized, encouraging, and actionable advice.`,
+          content: `You are a professional fitness coach. Use the user's data to provide helpful, personalized, encouraging, and actionable advice.`,
         },
         {
           role: "user",
@@ -345,15 +348,15 @@ User Question: ${message}`,
       temperature: 0.7,
     });
 
-    const response = completion.choices[0].message.content;
-    redirect(`/dashboard/coach?response=${encodeURIComponent(response)}`);
+    aiResponse = completion.choices[0].message.content;
   } catch (error) {
     console.error("AI Coach failed:", error);
-    redirect(
-      `/dashboard/coach?error=${encodeURIComponent(
-        error.message || "Unknown error"
-      )}`
-    );
+    aiError = error.message || "An unknown error occurred.";
+  }
+  if (aiError) {
+    redirect(`/dashboard/coach?error=${encodeURIComponent(aiError)}`);
+  } else {
+    redirect(`/dashboard/coach?response=${encodeURIComponent(aiResponse)}`);
   }
 }
 
