@@ -1,6 +1,8 @@
 import { askCoach } from "../../action.js";
 
 export default async function CoachPage({ searchParams }) { 
+  const params = await searchParams;
+
   return (
     <div className="space-y-6">
       <div className="bg-gradient-to-r from-indigo-50 to-purple-50 p-6 rounded-lg border border-indigo-200">
@@ -17,25 +19,25 @@ export default async function CoachPage({ searchParams }) {
       </div>
 
       {/* Display AI Response */}
-      {searchParams?.response && (
+      {params?.response && (
         <div className="bg-white p-6 rounded-lg shadow border-l-4 border-blue-500">
           <h4 className="text-lg font-semibold text-gray-700 mb-3 flex items-center">
             🤖 Coach Response
           </h4>
           <div className="prose prose-sm max-w-none">
             <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">
-              {decodeURIComponent(searchParams.response)}
+              {decodeURIComponent(params.response)}
             </p>
           </div>
         </div>
       )}
 
       {/* Error Message */}
-      {searchParams?.error && (
+      {params?.error && (
         <div className="bg-red-50 p-4 rounded-lg border border-red-200">
           <p className="text-red-700">
             Sorry, I'm having trouble right now. Error:{" "}
-            {decodeURIComponent(searchParams.error)}
+            {decodeURIComponent(params.error)}
           </p>
         </div>
       )}
@@ -73,7 +75,7 @@ export default async function CoachPage({ searchParams }) {
           💡 Quick Questions
         </h4>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {[
+          {[ 
             "How can I improve my meal planning?",
             "What exercises should I focus on?",
             "How to stay motivated?",
