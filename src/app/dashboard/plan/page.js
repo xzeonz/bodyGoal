@@ -4,6 +4,8 @@ import { redirect } from "next/navigation";
 import { generateAIPlan, addMeal, addWorkout } from "../../action.js";
 
 export default async function PlanPage({ searchParams }) {
+  const params = await searchParams;
+
   const session = await getSession();
   if (!session?.user) redirect("/login");
 
@@ -17,10 +19,10 @@ export default async function PlanPage({ searchParams }) {
 
   if (!user) redirect("/login");
   
-  if (!user.onboarding && searchParams.onboarding !== "true") {
+  if (!user.onboarding && params.onboarding !== "true") {
     redirect("/dashboard/plan?onboarding=true");
   }
-  if (user.onboarding && !user.aiPlan && searchParams.generate !== "true") {
+  if (user.onboarding && !user.aiPlan && params.generate !== "true") {
     redirect("/dashboard/plan?generate=true");
   }
 
@@ -38,7 +40,7 @@ export default async function PlanPage({ searchParams }) {
   return (
     <div className="space-y-6">
       {/* Onboarding Mode */}
-      {searchParams?.onboarding === "true" && !user.onboarding && (
+      {params?.onboarding === "true" && !user.onboarding && (
         <div className="bg-gradient-to-r from-blue-50 to-purple-50 p-8 rounded-lg border">
           <h2 className="text-2xl font-bold text-gray-900 mb-4">
             🎯 Selamat Datang! Mari Buat Rencana Pribadi Anda
@@ -163,7 +165,7 @@ export default async function PlanPage({ searchParams }) {
       {/* Plan Generated Mode */}
       {user.onboarding && (
         <div>
-          {searchParams?.generated === "true" && (
+          {params?.generated === "true" && (
             <div className="bg-green-50 border border-green-200 p-6 rounded-lg mb-6">
               <h3 className="text-lg font-bold text-green-800 mb-2">
                 ✅ Rencana Pribadi Anda Siap!
