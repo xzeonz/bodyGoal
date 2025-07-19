@@ -1,12 +1,9 @@
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
-// Pastikan path ini benar sesuai lokasi action.js Anda
-// Contoh: '@/app/actions/action.js' jika action.js ada di src/app/actions/
 import { generateAIPlan, addMeal, addWorkout } from "@/app/action";
 
 export default async function PlanPage({ searchParams }) {
-  // Destructure properties from searchParams to avoid the warning
   const { onboarding, generate, generated } = searchParams;
 
   const session = await getSession();
@@ -16,26 +13,21 @@ export default async function PlanPage({ searchParams }) {
     where: { id: session.user.id },
     include: {
       onboarding: true,
-      aiPlan: true, // Pastikan aiPlan disertakan di sini
+      aiPlan: true,
     },
   });
 
   if (!user) redirect("/login");
-
-  // Logika redirect untuk onboarding dan generate plan
   if (!user.onboarding && onboarding !== "true") {
-    // Menggunakan variabel destructured
     redirect("/dashboard/plan?onboarding=true");
   }
   if (user.onboarding && !user.aiPlan && generate !== "true") {
-    // Menggunakan variabel destructured
     redirect("/dashboard/plan?generate=true");
   }
 
   let aiMealPlan = [];
   let aiWorkoutPlan = [];
   if (user.aiPlan?.mealPlan && user.aiPlan?.workoutPlan) {
-    // --- DEBUGGING SANGAT PENTING DI SINI ---
     console.log("--- DEBUGGING AI PLAN DATA di PlanPage ---");
     console.log("user.aiPlan.mealPlan (RAW from DB):", user.aiPlan.mealPlan);
     console.log(
@@ -45,20 +37,17 @@ export default async function PlanPage({ searchParams }) {
     console.log("--- END DEBUGGING ---");
 
     try {
-      // JSON.parse ini akan menyebabkan error jika data di DB tidak valid JSON
       aiMealPlan = JSON.parse(user.aiPlan.mealPlan);
       aiWorkoutPlan = JSON.parse(user.aiPlan.workoutPlan);
     } catch (e) {
       console.error("Failed to parse AI plan from DB:", e);
       console.error("Problematic mealPlan string:", user.aiPlan.mealPlan);
       console.error("Problematic workoutPlan string:", user.aiPlan.workoutPlan);
-      aiMealPlan = []; // Set ke array kosong agar tidak crash dan UI tetap tampil
-      aiWorkoutPlan = []; // Set ke array kosong agar tidak crash dan UI tetap tampil
+      aiMealPlan = [];
+      aiWorkoutPlan = [];
     }
   }
-
-  // Perbaikan untuk error searchParams: ambil nilainya secara eksplisit
-  const isGenerated = generated === "true"; // Menggunakan variabel destructured
+  const isGenerated = generated === "true";
 
   return (
     <div className="space-y-6">
