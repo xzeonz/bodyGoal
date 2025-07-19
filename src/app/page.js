@@ -47,8 +47,8 @@ export default async function Home() {
               <span className="inline-flex items-center">
                 {/* SVG Icon for lightning bolt */}
                 <svg
-                  className="h-6 w-6 mr-2 text-purple-500"
-                  fill="none"
+                  className="h-6 w-6 mr-2 text-white"
+                  fill="currentColor"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
                   xmlns="http://www.w3.org/2000/svg"
@@ -184,11 +184,11 @@ export default async function Home() {
           </div>
 
           {/* AI Integration Highlight */}
-          <div className="mt-20 bg-gradient-to-r from-purple-100 to-blue-100 p-8 rounded-xl">
-            <h3 className="text-2xl font-bold text-gray-900 mb-4">
+          <div className="mt-20 bg-gradient-to-r from-blue-400 to-purple-500 p-8 rounded-xl">
+            <h3 className="text-2xl font-bold text-white mb-4">
               🤖 AI-Powered Personal Coach
             </h3>
-            <p className="text-gray-700 max-w-2xl mx-auto">
+            <p className="text-white max-w-2xl mx-auto">
               Dapatkan rencana makan dan latihan yang dipersonalisasi
               berdasarkan data tubuh, goal, dan preferensi Anda. AI kami akan
               membuat plan harian yang sesuai dengan kebutuhan kalori dan target
@@ -252,27 +252,13 @@ export default async function Home() {
       </div>
 
       {/* Footer */}
-      <footer className="bg-gray-900 text-white py-12 mt-20">
+      <footer className="bg-gray-900 bg-gradient-to-r from-blue-600 to-purple-600 py-12 mt-20">
         <div className="container mx-auto px-6 text-center">
-          <div className="text-2xl font-bold text-blue-400 mb-4">BodyGoal</div>
-          <p className="text-gray-400 mb-6">
+          <div className="text-4xl font-bold text-white mb-4">BodyGoal</div>
+          <p className="text-white text-xl mb-4">
             Transform your body, transform your life. Start your fitness journey
             today.
           </p>
-          <div className="flex justify-center gap-6">
-            <a
-              href="/register"
-              className="text-blue-400 hover:text-blue-300 transition"
-            >
-              Get Started
-            </a>
-            <a
-              href="/login"
-              className="text-gray-400 hover:text-white transition"
-            >
-              Login
-            </a>
-          </div>
         </div>
       </footer>
     </div>
