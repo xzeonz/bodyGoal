@@ -1,359 +1,113 @@
 "use server";
 
-import { openai } from "../utils/openai";
-import { prisma } from "../lib/prisma";
-import { revalidatePath } from "next/cache";
+import { getSession, logout as authLogout } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { getToday } from "@/lib/getToday";
+import { openai } from "@/utils/openai";
 import { redirect } from "next/navigation";
-import { OpenAI } from "openai";
-import { getSession } from "../lib/auth";
+import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
 
-// Helper function untuk menghitung target kalori
+// =================================================================
+// HELPERS
+// =================================================================
+
+// Menggunakan versi detail dari file action.js baru
 function calculateCalories(weight, height, age, gender, activityLevel, goal) {
-  // Hitung BMR menggunakan Mifflin-St Jeor Equation
   let bmr;
   if (gender === "male") {
     bmr = 10 * weight + 6.25 * height - 5 * age + 5;
   } else {
     bmr = 10 * weight + 6.25 * height - 5 * age - 161;
   }
-
-  // Activity multiplier
   const activityMultipliers = {
     sedentary: 1.2,
     light: 1.375,
     moderate: 1.55,
     active: 1.725,
-    "very active": 1.9,
+    very_active: 1.9,
   };
-
   const tdee = bmr * (activityMultipliers[activityLevel] || 1.2);
-
-  // Adjust berdasarkan goal
-  if (goal.toLowerCase().includes("lose") || goal.toLowerCase().includes("weight loss")) {
-    return Math.round(tdee - 500); // Deficit 500 kalori untuk weight loss
-  } else if (goal.toLowerCase().includes("gain") || goal.toLowerCase().includes("muscle")) {
-    return Math.round(tdee + 300); // Surplus 300 kalori untuk muscle gain
+  if (goal?.toLowerCase().includes("lose")) {
+    return Math.round(tdee - 500);
+  } else if (goal?.toLowerCase().includes("gain")) {
+    return Math.round(tdee + 300);
   } else {
-    return Math.round(tdee); // Maintenance untuk toning/general fitness
+    return Math.round(tdee);
   }
 }
 
-export async function saveOnboardingData(formData) {
-  "use server";
-  
-  const session = await getSession();
-  if (!session?.user) {
-    redirect("/login");
-  }
-
-  try {
-    const gender = formData.get("gender");
-    const age = parseInt(formData.get("age"));
-    const height = parseInt(formData.get("height"));
-    const currentWeight = parseFloat(formData.get("currentWeight"));
-    const activityLevel = formData.get("activityLevel");
-
-    await prisma.onboarding.create({
-      data: {
-        userId: session.user.id,
-        gender,
-        age,
-        height,
-        currentWeight,
-        activityLevel,
-      },
-    });
-
-    console.log("✅ Aksi saveOnboardingData BERHASIL.");
-  } catch (error) {
-    console.error("❌ Aksi saveOnboardingData GAGAL:", error);
-    return;
-  }
-  
-  // Redirect outside try-catch to avoid NEXT_REDIRECT error
-  redirect("/onboarding/goal");
+function getFallbackSuggestions(suggestionType) {
+  const fallbacks = {
+    "meal and nutrition": [
+      "Focus on balanced meals.",
+      "Plan your meals ahead.",
+      "Include more vegetables.",
+    ],
+    "workout and exercise": [
+      "Mix cardio and strength training.",
+      "Listen to your body and rest.",
+      "Stay consistent, even on busy days.",
+    ],
+    // Tambahkan fallback lain jika perlu
+  };
+  return (
+    fallbacks[suggestionType] || [
+      "Stay consistent!",
+      "Small steps lead to big changes.",
+    ]
+  );
 }
 
-export async function saveFitnessGoal(formData) {
-  "use server";
-  
-  const session = await getSession();
-  if (!session?.user) {
-    redirect("/login");
-  }
-  
-  try {
-    const goal = formData.get("goal");
+// =================================================================
+// AUTH & ONBOARDING ACTIONS (dari action.js baru)
+// =================================================================
 
-    // Update onboarding dengan goal
-    await prisma.onboarding.update({
-      where: { userId: session.user.id },
-      data: { goal: goal },
-    });
-
-    // Auto-generate AI plan setelah goal setting
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      include: { onboarding: true },
-    });
-
-    if (user?.onboarding) {
-      const targetCalories = calculateCalories(
-        user.onboarding.currentWeight,
-        user.onboarding.height,
-        user.onboarding.age,
-        user.onboarding.gender,
-        user.onboarding.activityLevel,
-        user.onboarding.goal
-      );
-
-      // Generate AI plan menggunakan OpenAI
-      const completion = await openai.chat.completions.create({
-        model: "gpt-3.5-turbo",
-        messages: [
-          {
-            role: "system",
-            content: `You are a professional fitness and nutrition coach. Create a personalized daily plan based on user data. Return ONLY a JSON object with this exact structure:
-{
-  "mealPlan": [
-    {"name": "Breakfast name", "calories": number, "description": "brief description"},
-    {"name": "Lunch name", "calories": number, "description": "brief description"},
-    {"name": "Dinner name", "calories": number, "description": "brief description"},
-    {"name": "Snack name", "calories": number, "description": "brief description"}
-  ],
-  "workoutPlan": [
-    {"name": "Exercise name", "duration": number, "description": "brief description"},
-    {"name": "Exercise name", "duration": number, "description": "brief description"},
-    {"name": "Exercise name", "duration": number, "description": "brief description"}
-  ]
-}`,
-          },
-          {
-            role: "user",
-            content: `Create a daily plan for:
-- Gender: ${user.onboarding.gender}
-- Age: ${user.onboarding.age}
-- Height: ${user.onboarding.height}cm
-- Weight: ${user.onboarding.currentWeight}kg
-- Activity Level: ${user.onboarding.activityLevel}
-- Goal: ${user.onboarding.goal}
-- Target Calories: ${targetCalories}
-
-Make sure total meal calories approximately match target calories.`,
-          },
-        ],
-        temperature: 0.7,
-      });
-
-      const aiPlan = JSON.parse(completion.choices[0].message.content);
-      
-      // Save AI plan ke database
-      await prisma.aiPlan.upsert({
-        where: { userId: session.user.id },
-        update: {
-          mealPlan: JSON.stringify(aiPlan.mealPlan),
-          workoutPlan: JSON.stringify(aiPlan.workoutPlan),
-          generatedAt: new Date(),
-        },
-        create: {
-          userId: session.user.id,
-          mealPlan: JSON.stringify(aiPlan.mealPlan),
-          workoutPlan: JSON.stringify(aiPlan.workoutPlan),
-        },
-      });
-    }
-
-    console.log("✅ Aksi saveFitnessGoal + AI Plan Generation BERHASIL.");
-  } catch (error) {
-    console.error("❌ Aksi saveFitnessGoal GAGAL:", error);
-    return;
-  }
-  
-  // Redirect outside try-catch to avoid NEXT_REDIRECT error
-  redirect("/dashboard");
-}
-
-export async function getUserData() {
-  "use server";
-  
-  const session = await getSession();
-  if (!session?.user) {
-    return null;
-  }
-  
-  try {
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      include: {
-        onboarding: true,
-        meals: true,
-        workouts: true,
-        weights: true,
-        aiPlan: true,
-      },
-    });
-    console.log("✅ Aksi getUserData BERHASIL.");
-    return user;
-  } catch (error) {
-    console.error("❌ Aksi getUserData GAGAL:", error);
-    return null;
-  }
-}
-
-export async function logWeight(formData) {
-  "use server";
-  
-  const session = await getSession();
-  if (!session?.user) {
-    redirect("/login");
-  }
-  
-  try {
-    const weight = parseFloat(formData.get("weight"));
-    const date = formData.get("date") || new Date().toISOString().split('T')[0];
-
-    await prisma.weight.create({
-      data: {
-        userId: session.user.id,
-        weight: weight,
-        date: new Date(date),
-      },
-    });
-    revalidatePath("/dashboard/progress");
-    console.log("✅ Aksi logWeight BERHASIL.");
-  } catch (error) {
-    console.error("❌ Aksi logWeight GAGAL:", error);
-  }
-}
-
-export async function logMeal(formData) {
-  "use server";
-  
-  const session = await getSession();
-  if (!session?.user) {
-    redirect("/login");
-  }
-  
-  try {
-    const name = formData.get("name");
-    const calories = parseInt(formData.get("calories"));
-    const date = formData.get("date") || new Date().toISOString().split('T')[0];
-
-    await prisma.meal.create({
-      data: {
-        userId: session.user.id,
-        name: name,
-        calories: calories,
-        date: new Date(date),
-      },
-    });
-    revalidatePath("/dashboard/meal");
-    console.log("✅ Aksi logMeal BERHASIL.");
-  } catch (error) {
-    console.error("❌ Aksi logMeal GAGAL:", error);
-  }
-}
-
-export async function logWorkout(formData) {
-  "use server";
-  
-  const session = await getSession();
-  if (!session?.user) {
-    redirect("/login");
-  }
-  
-  try {
-    const name = formData.get("name");
-    const duration = parseInt(formData.get("duration"));
-    const date = formData.get("date") || new Date().toISOString().split('T')[0];
-
-    await prisma.workout.create({
-      data: {
-        userId: session.user.id,
-        name: name,
-        duration: duration,
-        date: new Date(date),
-      },
-    });
-    revalidatePath("/dashboard/plan");
-    console.log("✅ Aksi logWorkout BERHASIL.");
-  } catch (error) {
-    console.error("❌ Aksi logWorkout GAGAL:", error);
-  }
-}
 export async function registerUser(formData) {
-  "use server";
-  
   const name = formData.get("name");
   const email = formData.get("email");
   const password = formData.get("password");
-  
-  // Check if user already exists
-  const existingUser = await prisma.user.findUnique({
-    where: { email },
-  });
-  
+
+  const existingUser = await prisma.user.findUnique({ where: { email } });
   if (existingUser) {
     redirect("/register?error=user-exists");
   }
-  
-  // Create user with plain password
+
   await prisma.user.create({
-    data: {
-      name,
-      email,
-      password, // Plain text password as requested
-    },
+    data: { name, email, password }, // Password masih plain text sesuai permintaan
   });
-  
-  console.log("✅ User registration successful:", email);
+
   redirect("/onboarding");
 }
 
 export async function loginUser(formData) {
-  "use server";
-  
-  const { cookies } = await import('next/headers');
-  
   const email = formData.get("email");
   const password = formData.get("password");
-  
-  if (!email || !password) {
-    redirect("/login?error=missing-fields");
-  }
-  
-  // Find user by email
-  const user = await prisma.user.findUnique({
-    where: { email },
-  });
-  
-  // Compare plain text password
-  if (!user || user.password !== password) {
+
+  if (!email || !password) redirect("/login?error=missing-fields");
+
+  const user = await prisma.user.findUnique({ where: { email } });
+
+  if (!user || user.password !== password)
     redirect("/login?error=invalid-credentials");
-  }
-  
-  // Set session cookie untuk manual login
-  const cookieStore = await cookies();
-  cookieStore.set('user-session', JSON.stringify({
-    id: user.id,
-    email: user.email,
-    name: user.name
-  }), {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    maxAge: 60 * 60 * 24 * 7, // 7 days
-    sameSite: 'lax'
-  });
-  
-  console.log("✅ User login successful:", email);
-  
-  // Check if user has completed onboarding
+
+  const cookieStore = cookies();
+  cookieStore.set(
+    "user-session",
+    JSON.stringify({ id: user.id, email: user.email, name: user.name }),
+    {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      maxAge: 60 * 60 * 24 * 7, // 7 hari
+      sameSite: "lax",
+    }
+  );
+
   const userWithOnboarding = await prisma.user.findUnique({
     where: { id: user.id },
     include: { onboarding: true },
   });
-  
-  // Redirect to onboarding if not completed, otherwise to dashboard
+
   if (!userWithOnboarding?.onboarding) {
     redirect("/onboarding");
   } else {
@@ -362,247 +116,291 @@ export async function loginUser(formData) {
 }
 
 export async function logoutUser() {
-  "use server";
-  
-  const { logout } = await import('../lib/auth');
-  
-  // Hapus semua session cookies
-  await logout();
-  
+  await authLogout(); // Menggunakan fungsi logout dari lib/auth
   redirect("/login");
 }
 
-export async function testOpenAIKey() {
-  console.log("🧪 Memulai tes koneksi ke OpenAI...");
-
-  if (!process.env.OPENAI_API_KEY) {
-    console.error("❌ Key OPENAI_API_KEY tidak ditemukan di file .env");
-    return { success: false, error: "API Key not found." };
-  }
-
-  const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-  });
-
-  try {
-    const response = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
-      messages: [{ role: "user", content: "Katakan 'Hello World!'" }],
-    });
-
-    console.log("✅ Koneksi dan API Key OpenAI BERHASIL.");
-    console.log("Jawaban dari AI:", response.choices[0].message.content);
-    return { success: true, message: response.choices[0].message.content };
-  } catch (error) {
-    console.error("❌ Koneksi atau API Key OpenAI GAGAL:", error.message);
-    return { success: false, error: error.message };
-  }
-}
-export async function askCoach(formData) {
-  const question = formData.get("question");
-  if (!question) throw new Error("Question is required");
-
-  // Example user profile - you can extend this to fetch real user data if needed
-  const profile = {
-    name: "User",
-    age: 25,
-    gender: "male",
-    height: 170,
-    weight: 70,
-    activityLevel: "moderately active",
-  };
-
-  const prompt = `
-You are a fitness coach AI. Answer the user's question clearly.
-User Profile:
-- Name: ${profile.name}
-- Age: ${profile.age}
-- Gender: ${profile.gender}
-- Height: ${profile.height} cm
-- Weight: ${profile.weight} kg
-- Activity Level: ${profile.activityLevel}
-Question: ${question}`;
-
-  const completion = await openai.chat.completions.create({
-    model: "gpt-3.5-turbo",
-    messages: [{ role: "user", content: prompt }],
-  });
-
-  return completion.choices?.[0]?.message?.content || "No response";
-}
-
-export async function generatePlan(formData) {
+// Menyimpan data onboarding langkah pertama
+export async function saveOnboardingData(formData) {
   const session = await getSession();
-  if (!session?.user) {
-    throw new Error("User not authenticated");
-  }
+  if (!session?.user) redirect("/login");
 
-  const gender = formData.get("gender");
-  const age = parseInt(formData.get("age"));
-  const height = parseInt(formData.get("height"));
-  const weight = parseFloat(formData.get("weight"));
-  const activityLevel = formData.get("activityLevel");
-  const goal = formData.get("goal");
-  const durasiMinggu = parseInt(formData.get("durasiMinggu"));
-
-  if (!gender) {
-    throw new Error("Field 'gender' tidak lengkap atau tidak valid");
+  try {
+    await prisma.onboarding.create({
+      data: {
+        userId: session.user.id,
+        gender: formData.get("gender"),
+        age: parseInt(formData.get("age")),
+        height: parseInt(formData.get("height")),
+        currentWeight: parseFloat(formData.get("currentWeight")),
+        activityLevel: formData.get("activityLevel"),
+      },
+    });
+  } catch (error) {
+    console.error("Save Onboarding Data failed:", error);
+    // Mungkin redirect ke halaman error
+    return;
   }
-  if (!age || isNaN(age)) {
-    throw new Error("Field 'age' tidak lengkap atau tidak valid");
-  }
-  if (!height || isNaN(height)) {
-    throw new Error("Field 'height' tidak lengkap atau tidak valid");
-  }
-  if (!weight || isNaN(weight)) {
-    throw new Error("Field 'weight' tidak lengkap atau tidak valid");
-  }
-  if (!activityLevel) {
-    throw new Error("Field 'activityLevel' tidak lengkap atau tidak valid");
-  }
-  if (!goal) {
-    throw new Error("Field 'goal' tidak lengkap atau tidak valid");
-  }
-  if (!durasiMinggu || isNaN(durasiMinggu)) {
-    throw new Error("Field 'durasiMinggu' tidak lengkap atau tidak valid");
-  }
-
-  const prompt = `
-You are a professional fitness and nutrition coach. Create a personalized weekly fitness plan based on the following user profile. Return ONLY a JSON object with this exact structure:
-
-{
-  "strategySummary": "string",
-  "weeklyWorkoutPlan": [
-    {"day": "Monday", "exercises": [{"name": "string", "duration": number, "description": "string"}]},
-    {"day": "Tuesday", "exercises": [{"name": "string", "duration": number, "description": "string"}]},
-    {"day": "Wednesday", "exercises": [{"name": "string", "duration": number, "description": "string"}]},
-    {"day": "Thursday", "exercises": [{"name": "string", "duration": number, "description": "string"}]},
-    {"day": "Friday", "exercises": [{"name": "string", "duration": number, "description": "string"}]},
-    {"day": "Saturday", "exercises": [{"name": "string", "duration": number, "description": "string"}]},
-    {"day": "Sunday", "exercises": [{"name": "string", "duration": number, "description": "string"}]}
-  ],
-  "dailyMealRecommendations": [
-    {"meal": "Breakfast", "calories": number, "description": "string"},
-    {"meal": "Lunch", "calories": number, "description": "string"},
-    {"meal": "Dinner", "calories": number, "description": "string"},
-    {"meal": "Snack", "calories": number, "description": "string"}
-  ],
-  "weeklyProgressEstimation": "string",
-  "additionalTips": "string",
-  "programDurationWeeks": number
+  redirect("/onboarding/goal");
 }
 
-User Profile:
-- Gender: ${gender}
-- Age: ${age}
-- Height: ${height} cm
-- Current Weight: ${weight} kg
-- Activity Level: ${activityLevel}
-- Goal: ${goal}
-- Program Duration: ${durasiMinggu} weeks
-`;
+// =================================================================
+// DASHBOARD ACTIONS (Gabungan terbaik dari kedua file)
+// =================================================================
 
-  const completion = await openai.chat.completions.create({
-    model: "gpt-3.5-turbo",
-    messages: [{ role: "user", content: prompt }],
-    temperature: 0.7,
-  });
+// Menggunakan nama standar 'addMeal' dengan logic dari 'logMeal'
+export async function addMeal(formData) {
+  const session = await getSession();
+  if (!session?.user) return;
 
-  let aiPlanContent = completion.choices?.[0]?.message?.content || null;
-  if (!aiPlanContent) {
-    throw new Error("AI did not return a plan");
-  }
+  const name = formData.get("name");
+  const calories = parseInt(formData.get("calories"));
+  if (!name || isNaN(calories)) return;
 
-  let aiPlan;
-  try {
-    aiPlan = JSON.parse(aiPlanContent);
-  } catch (error) {
-    throw new Error("Failed to parse AI plan JSON: " + error.message);
-  }
-
-  // Save AI plan to database
-  await prisma.aiPlan.upsert({
-    where: { userId: session.user.id },
-    update: {
-      mealPlan: JSON.stringify(aiPlan.dailyMealRecommendations),
-      workoutPlan: JSON.stringify(aiPlan.weeklyWorkoutPlan),
-      strategySummary: aiPlan.strategySummary,
-      weeklyProgressEstimation: aiPlan.weeklyProgressEstimation,
-      additionalTips: aiPlan.additionalTips,
-      programDurationWeeks: aiPlan.programDurationWeeks,
-      generatedAt: new Date(),
-    },
-    create: {
+  await prisma.meal.create({
+    data: {
       userId: session.user.id,
-      mealPlan: JSON.stringify(aiPlan.dailyMealRecommendations),
-      workoutPlan: JSON.stringify(aiPlan.weeklyWorkoutPlan),
-      strategySummary: aiPlan.strategySummary,
-      weeklyProgressEstimation: aiPlan.weeklyProgressEstimation,
-      additionalTips: aiPlan.additionalTips,
-      programDurationWeeks: aiPlan.programDurationWeeks,
-      generatedAt: new Date(),
+      name,
+      calories,
+      date: getToday(),
+    },
+  });
+  // Revalidate path yang relevan dengan struktur baru
+  revalidatePath("/dashboard/meals");
+  revalidatePath("/dashboard/overview");
+}
+
+// Menggunakan nama standar 'addWorkout' dengan logic dari 'logWorkout'
+export async function addWorkout(formData) {
+  const session = await getSession();
+  if (!session?.user) return;
+
+  const name = formData.get("name");
+  const duration = parseInt(formData.get("duration"));
+  if (!name || isNaN(duration)) return;
+
+  await prisma.workout.create({
+    data: {
+      userId: session.user.id,
+      name,
+      duration,
+      date: getToday(),
+    },
+  });
+  revalidatePath("/dashboard/workouts");
+  revalidatePath("/dashboard/overview");
+}
+
+// Menggunakan nama standar 'addWeight' dengan logic dari 'logWeight'
+export async function addWeight(formData) {
+  const session = await getSession();
+  if (!session?.user) return;
+
+  const weight = parseFloat(formData.get("weight"));
+  if (isNaN(weight)) return;
+
+  await prisma.weight.create({
+    data: {
+      userId: session.user.id,
+      weight,
+      date: getToday(),
+    },
+  });
+  revalidatePath("/dashboard/progress");
+  revalidatePath("/dashboard/overview");
+}
+
+// Versi `generateAIPlan` yang sesuai dengan UI dashboard (dari dashboard/page.js)
+export async function generateAIPlan(formData) {
+  const session = await getSession();
+  if (!session?.user) return;
+
+  const isOnboarding = formData.get("age"); // Cek apakah ini dari form onboarding
+
+  if (isOnboarding) {
+    await prisma.onboarding.upsert({
+      where: { userId: session.user.id },
+      update: {
+        age: parseInt(formData.get("age")),
+        height: parseInt(formData.get("height")),
+        currentWeight: parseFloat(formData.get("currentWeight")),
+        targetWeight: parseFloat(formData.get("targetWeight")),
+        gender: formData.get("gender"),
+        activityLevel: formData.get("activityLevel"),
+        goal: formData.get("goal"),
+      },
+      create: {
+        userId: session.user.id,
+        age: parseInt(formData.get("age")),
+        height: parseInt(formData.get("height")),
+        currentWeight: parseFloat(formData.get("currentWeight")),
+        targetWeight: parseFloat(formData.get("targetWeight")),
+        gender: formData.get("gender"),
+        activityLevel: formData.get("activityLevel"),
+        goal: formData.get("goal"),
+      },
+    });
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    include: { onboarding: true },
+  });
+
+  if (!user?.onboarding) return;
+
+  const targetCalories = calculateCalories(
+    user.onboarding.currentWeight,
+    user.onboarding.height,
+    user.onboarding.age,
+    user.onboarding.gender,
+    user.onboarding.activityLevel,
+    user.onboarding.goal
+  );
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: "gpt-3.5-turbo",
+      messages: [
+        {
+          role: "system",
+          content: `You are a professional fitness coach. Create a daily plan. Return ONLY a JSON object with this structure: {"mealPlan": [{"name": string, "calories": number, "description": string}], "workoutPlan": [{"name": string, "duration": number, "description": string}]}`,
+        },
+        {
+          role: "user",
+          content: `Data: Gender: ${user.onboarding.gender}, Age: ${user.onboarding.age}, Height: ${user.onboarding.height}cm, Weight: ${user.onboarding.currentWeight}kg, Activity: ${user.onboarding.activityLevel}, Goal: ${user.onboarding.goal}, Target Calories: ${targetCalories}.`,
+        },
+      ],
+      temperature: 0.7,
+    });
+
+    const aiPlan = JSON.parse(completion.choices[0].message.content);
+
+    await prisma.aiPlan.upsert({
+      where: { userId: session.user.id },
+      update: {
+        mealPlan: JSON.stringify(aiPlan.mealPlan),
+        workoutPlan: JSON.stringify(aiPlan.workoutPlan),
+        generatedAt: new Date(),
+      },
+      create: {
+        userId: session.user.id,
+        mealPlan: JSON.stringify(aiPlan.mealPlan),
+        workoutPlan: JSON.stringify(aiPlan.workoutPlan),
+      },
+    });
+
+    revalidatePath("/dashboard", "layout"); // Revalidate seluruh layout dashboard
+
+    if (isOnboarding) {
+      redirect("/dashboard/plan?generated=true");
+    }
+  } catch (error) {
+    console.error("AI Plan generation failed:", error);
+  }
+}
+
+// Versi `askCoach` yang detail dan menggunakan data user (dari dashboard/page.js)
+export async function askCoach(formData) {
+  const session = await getSession();
+  if (!session?.user) redirect("/login");
+
+  const message = formData.get("message");
+  if (!message) {
+    redirect("/dashboard/coach?error=No+message+provided");
+    return;
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    include: {
+      onboarding: true,
+      meals: {
+        where: { date: getToday() },
+        orderBy: { createdAt: "desc" },
+        take: 5,
+      },
+      workouts: {
+        where: { date: getToday() },
+        orderBy: { createdAt: "desc" },
+        take: 5,
+      },
+      weights: { orderBy: { date: "desc" }, take: 3 },
     },
   });
 
-  console.log("✅ AI Plan saved successfully for user:", session.user.id);
-
-  // Revalidate dashboard path to refresh UI cache
-  revalidatePath("/dashboard");
-
-  return aiPlan;
-}
-
-export async function addMealLog(formData) {
-  "use server";
-  
-  const session = await getSession();
-  if (!session?.user) {
-    redirect("/login");
-  }
-  
   try {
-    await prisma.meal.create({
-      data: {
-        name: formData.get("name") || "Meal",
-        calories: parseInt(formData.get("calories")) || 0,
-        date: formData.get("date") || new Date().toISOString().split('T')[0],
-        userId: session.user.id,
-      },
+    const completion = await openai.chat.completions.create({
+      model: "gpt-3.5-turbo",
+      messages: [
+        {
+          role: "system",
+          content: `You are a professional fitness and nutrition coach. Use the user's data to provide helpful, personalized, encouraging, and actionable advice.`,
+        },
+        {
+          role: "user",
+          content: `User Profile: Name: ${user.name}, Gender: ${
+            user.onboarding?.gender || "N/A"
+          }, Age: ${user.onboarding?.age || "N/A"}, Goal: ${
+            user.onboarding?.goal || "N/A"
+          }.
+Recent Activity: Today's Meals: ${JSON.stringify(
+            user.meals
+          )}, Today's Workouts: ${JSON.stringify(
+            user.workouts
+          )}, Recent Weights: ${JSON.stringify(user.weights)}.
+User Question: ${message}`,
+        },
+      ],
+      temperature: 0.7,
     });
-    revalidatePath("/dashboard");
-    console.log("✅ Aksi addMealLog BERHASIL.");
+
+    const response = completion.choices[0].message.content;
+    redirect(`/dashboard/coach?response=${encodeURIComponent(response)}`);
   } catch (error) {
-    console.error("❌ Aksi addMealLog GAGAL:", error);
+    console.error("AI Coach failed:", error);
+    redirect(
+      `/dashboard/coach?error=${encodeURIComponent(
+        error.message || "Unknown error"
+      )}`
+    );
   }
 }
 
-export async function addWorkoutLog(formData) {
+// Aksi untuk suggestion, diperlukan oleh beberapa halaman
+export async function generateAISuggestions(
+  userData,
+  currentData,
+  suggestionType
+) {
   "use server";
-  
-  const session = await getSession();
-  if (!session?.user) {
-    redirect("/login");
-  }
-  
   try {
-    await prisma.workout.create({
-      data: {
-        name: formData.get("name") || formData.get("exercise") || "Workout",
-        duration: parseInt(formData.get("duration")) || parseInt(formData.get("sets")) * parseInt(formData.get("reps")) || 30,
-        date: formData.get("date") || new Date().toISOString().split('T')[0],
-        userId: session.user.id,
-      },
+    const completion = await openai.chat.completions.create({
+      model: "gpt-3.5-turbo",
+      messages: [
+        {
+          role: "system",
+          content: `You are a professional fitness and nutrition coach. Provide personalized suggestions. Return ONLY a valid JSON array of 2-3 suggestion strings.`,
+        },
+        {
+          role: "user",
+          content: `User Profile: Gender: ${userData.gender}, Age: ${
+            userData.age
+          }, Goal: ${userData.goal}. Current Data: ${JSON.stringify(
+            currentData
+          )}. Provide ${suggestionType} suggestions as a JSON array of strings.`,
+        },
+      ],
+      temperature: 0.7,
     });
-    revalidatePath("/dashboard");
-    console.log("✅ Aksi addWorkoutLog BERHASIL.");
-  } catch (error) {
-    console.error("❌ Aksi addWorkoutLog GAGAL:", error);
-  }
-}
 
-export async function uploadDummyPhoto() {
-  // Simulasi upload ke Cloudflare R2, kembalikan URL dummy
-  const url =
-    "https://www.unsulbarnews.com/wp-content/uploads/2023/11/WhatsApp-Image-2023-11-12-at-08.38.20.jpeg";
-  return { url };
+    let content = completion.choices[0].message.content
+      .trim()
+      .replace(/```json|```/g, "");
+    const suggestions = JSON.parse(content);
+    return Array.isArray(suggestions) ? suggestions : [];
+  } catch (error) {
+    console.error("AI Suggestions generation failed:", error);
+    return getFallbackSuggestions(suggestionType);
+  }
 }
