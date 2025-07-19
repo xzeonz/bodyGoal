@@ -1,0 +1,76 @@
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+model User {
+  id          String       @id @default(cuid())
+  email       String       @unique
+  name        String?
+  password    String?      // ✅ ADD PASSWORD FIELD (optional for OAuth)
+  avatarUrl   String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  
+  // Relations
+  meals       Meal[]
+  workouts    Workout[]
+  weights     Weight[]
+  onboarding  Onboarding?
+  aiPlan      AiPlan?
+}
+model Onboarding {
+  id            String @id @default(cuid())
+  gender        String
+  age           Int
+  height        Int
+  currentWeight Float
+  activityLevel String
+  goal          String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  user          User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId        String @unique
+}
+model Meal {
+  id        String   @id @default(cuid())
+  name      String
+  calories  Int
+  date      String
+  createdAt DateTime @default(now())
+  
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+}
+model Workout {
+  id        String   @id @default(cuid())
+  name      String
+  duration  Int
+  date      String
+  createdAt DateTime @default(now())
+  
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+}
+model Weight {
+  id        String   @id @default(cuid())
+  weight    Float
+  date      String
+  createdAt DateTime @default(now())
+  
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+}
+model AiPlan {
+  id          String   @id @default(cuid())
+  mealPlan    String   // JSON string
+  workoutPlan String   // JSON string
+  generatedAt DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String   @unique
+}
