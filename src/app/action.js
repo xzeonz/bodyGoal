@@ -8,6 +8,8 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 
+const CACHE_DURATION_HOURS = 24;
+
 // =================================================================
 // HELPERS
 // =================================================================
