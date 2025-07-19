@@ -1,4 +1,4 @@
-import { registerUser } from "../../action";
+import { registerUser } from "@/app/action";
 
 export default async function RegisterPage({ searchParams }) {
   const params = await searchParams;
@@ -11,8 +11,10 @@ export default async function RegisterPage({ searchParams }) {
         {error && (
           <div className="p-3 rounded-lg bg-red-50 border border-red-200">
             <p className="text-red-600 text-sm text-center">
-              {error === 'user-exists' && 'Email sudah terdaftar. Silakan gunakan email lain atau login.'}
-              {error === 'registration-failed' && 'Registrasi gagal. Silakan coba lagi.'}
+              {error === "user-exists" &&
+                "Email sudah terdaftar. Silakan gunakan email lain atau login."}
+              {error === "registration-failed" &&
+                "Registrasi gagal. Silakan coba lagi."}
             </p>
           </div>
         )}

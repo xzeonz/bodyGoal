@@ -1,10 +1,13 @@
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
-import { generateAIPlan, addMeal, addWorkout } from "../../action.js";
+// Pastikan path ini benar sesuai lokasi action.js Anda
+// Contoh: '@/app/actions/action.js' jika action.js ada di src/app/actions/
+import { generateAIPlan, addMeal, addWorkout } from "@/app/action";
 
 export default async function PlanPage({ searchParams }) {
-  const params = await searchParams;
+  // Destructure properties from searchParams to avoid the warning
+  const { onboarding, generate, generated } = searchParams;
 
   const session = await getSession();
   if (!session?.user) redirect("/login");
@@ -13,159 +16,180 @@ export default async function PlanPage({ searchParams }) {
     where: { id: session.user.id },
     include: {
       onboarding: true,
-      aiPlan: true,
+      aiPlan: true, // Pastikan aiPlan disertakan di sini
     },
   });
 
   if (!user) redirect("/login");
-  
-  if (!user.onboarding && params.onboarding !== "true") {
+
+  // Logika redirect untuk onboarding dan generate plan
+  if (!user.onboarding && onboarding !== "true") {
+    // Menggunakan variabel destructured
     redirect("/dashboard/plan?onboarding=true");
   }
-  if (user.onboarding && !user.aiPlan && params.generate !== "true") {
+  if (user.onboarding && !user.aiPlan && generate !== "true") {
+    // Menggunakan variabel destructured
     redirect("/dashboard/plan?generate=true");
   }
 
   let aiMealPlan = [];
   let aiWorkoutPlan = [];
   if (user.aiPlan?.mealPlan && user.aiPlan?.workoutPlan) {
+    // --- DEBUGGING SANGAT PENTING DI SINI ---
+    console.log("--- DEBUGGING AI PLAN DATA di PlanPage ---");
+    console.log("user.aiPlan.mealPlan (RAW from DB):", user.aiPlan.mealPlan);
+    console.log(
+      "user.aiPlan.workoutPlan (RAW from DB):",
+      user.aiPlan.workoutPlan
+    );
+    console.log("--- END DEBUGGING ---");
+
     try {
+      // JSON.parse ini akan menyebabkan error jika data di DB tidak valid JSON
       aiMealPlan = JSON.parse(user.aiPlan.mealPlan);
       aiWorkoutPlan = JSON.parse(user.aiPlan.workoutPlan);
     } catch (e) {
-      console.error("Failed to parse AI plan:", e);
+      console.error("Failed to parse AI plan from DB:", e);
+      console.error("Problematic mealPlan string:", user.aiPlan.mealPlan);
+      console.error("Problematic workoutPlan string:", user.aiPlan.workoutPlan);
+      aiMealPlan = []; // Set ke array kosong agar tidak crash dan UI tetap tampil
+      aiWorkoutPlan = []; // Set ke array kosong agar tidak crash dan UI tetap tampil
     }
   }
+
+  // Perbaikan untuk error searchParams: ambil nilainya secara eksplisit
+  const isGenerated = generated === "true"; // Menggunakan variabel destructured
 
   return (
     <div className="space-y-6">
       {/* Onboarding Mode */}
-      {params?.onboarding === "true" && !user.onboarding && (
-        <div className="bg-gradient-to-r from-blue-50 to-purple-50 p-8 rounded-lg border">
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">
-            🎯 Selamat Datang! Mari Buat Rencana Pribadi Anda
-          </h2>
-          <p className="text-gray-600 mb-6">
-            Lengkapi data diri untuk membuat rencana makan dan olahraga yang
-            dipersonalisasi.
-          </p>
+      {onboarding === "true" &&
+        !user.onboarding && ( // Menggunakan variabel destructured
+          <div className="bg-gradient-to-r from-blue-50 to-purple-50 p-8 rounded-lg border">
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">
+              🎯 Selamat Datang! Mari Buat Rencana Pribadi Anda
+            </h2>
+            <p className="text-gray-600 mb-6">
+              Lengkapi data diri untuk membuat rencana makan dan olahraga yang
+              dipersonalisasi.
+            </p>
 
-          <form action={generateAIPlan} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Usia
-                </label>
-                <input
-                  name="age"
-                  type="number"
-                  placeholder="25"
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  required
-                />
+            <form action={generateAIPlan} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Usia
+                  </label>
+                  <input
+                    name="age"
+                    type="number"
+                    placeholder="25"
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Tinggi (cm)
+                  </label>
+                  <input
+                    name="height"
+                    type="number"
+                    placeholder="170"
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Berat Saat Ini (kg)
+                  </label>
+                  <input
+                    name="currentWeight"
+                    type="number"
+                    step="0.1"
+                    placeholder="70"
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Target Berat (kg)
+                  </label>
+                  <input
+                    name="targetWeight"
+                    type="number"
+                    step="0.1"
+                    placeholder="65"
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Gender
+                  </label>
+                  <select
+                    name="gender"
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    required
+                  >
+                    <option value="">Pilih Gender</option>
+                    <option value="male">Pria</option>
+                    <option value="female">Wanita</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Level Aktivitas
+                  </label>
+                  <select
+                    name="activityLevel"
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    required
+                  >
+                    <option value="">Pilih Level Aktivitas</option>
+                    <option value="sedentary">Jarang (tanpa olahraga)</option>
+                    <option value="light">Ringan (1-3 hari/minggu)</option>
+                    <option value="moderate">Sedang (3-5 hari/minggu)</option>
+                    <option value="active">Aktif (6-7 hari/minggu)</option>
+                    <option value="very_active">
+                      Sangat Aktif (latihan berat/pekerjaan fisik)
+                    </option>
+                  </select>
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Tujuan Anda
+                  </label>
+                  <select
+                    name="goal"
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    required
+                  >
+                    <option value="">Pilih Tujuan Anda</option>
+                    <option value="lose_weight">Menurunkan Berat Badan</option>
+                    <option value="gain_weight">Menaikkan Berat Badan</option>
+                    <option value="maintain_weight">Menjaga Berat Badan</option>
+                    <option value="build_muscle">Membentuk Otot</option>
+                  </select>
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Tinggi (cm)
-                </label>
-                <input
-                  name="height"
-                  type="number"
-                  placeholder="170"
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Berat Saat Ini (kg)
-                </label>
-                <input
-                  name="currentWeight"
-                  type="number"
-                  step="0.1"
-                  placeholder="70"
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Target Berat (kg)
-                </label>
-                <input
-                  name="targetWeight"
-                  type="number"
-                  step="0.1"
-                  placeholder="65"
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Gender
-                </label>
-                <select
-                  name="gender"
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  required
-                >
-                  <option value="">Pilih Gender</option>
-                  <option value="male">Pria</option>
-                  <option value="female">Wanita</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Level Aktivitas
-                </label>
-                <select
-                  name="activityLevel"
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  required
-                >
-                  <option value="">Pilih Level Aktivitas</option>
-                  <option value="sedentary">Jarang (tanpa olahraga)</option>
-                  <option value="light">Ringan (1-3 hari/minggu)</option>
-                  <option value="moderate">Sedang (3-5 hari/minggu)</option>
-                  <option value="active">Aktif (6-7 hari/minggu)</option>
-                  <option value="very_active">
-                    Sangat Aktif (latihan berat/pekerjaan fisik)
-                  </option>
-                </select>
-              </div>
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Tujuan Anda
-                </label>
-                <select
-                  name="goal"
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  required
-                >
-                  <option value="">Pilih Tujuan Anda</option>
-                  <option value="lose_weight">Menurunkan Berat Badan</option>
-                  <option value="gain_weight">Menaikkan Berat Badan</option>
-                  <option value="maintain_weight">Menjaga Berat Badan</option>
-                  <option value="build_muscle">Membentuk Otot</option>
-                </select>
-              </div>
-            </div>
-            <button
-              type="submit"
-              className="w-full bg-gradient-to-r from-blue-500 to-purple-500 text-white py-4 rounded-lg font-bold text-lg hover:from-blue-600 hover:to-purple-600 transition shadow-lg"
-            >
-              🚀 Buat Rencana Pribadi Saya
-            </button>
-          </form>
-        </div>
-      )}
+              <button
+                type="submit"
+                className="w-full bg-gradient-to-r from-blue-500 to-purple-500 text-white py-4 rounded-lg font-bold text-lg hover:from-blue-600 hover:to-purple-600 transition shadow-lg"
+              >
+                🚀 Buat Rencana Pribadi Saya
+              </button>
+            </form>
+          </div>
+        )}
 
       {/* Plan Generated Mode */}
       {user.onboarding && (
         <div>
-          {params?.generated === "true" && (
+          {isGenerated && ( // Menggunakan variabel isGenerated
             <div className="bg-green-50 border border-green-200 p-6 rounded-lg mb-6">
               <h3 className="text-lg font-bold text-green-800 mb-2">
                 ✅ Rencana Pribadi Anda Siap!

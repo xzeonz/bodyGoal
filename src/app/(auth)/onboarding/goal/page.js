@@ -1,5 +1,5 @@
-import { saveFitnessGoal } from "../../../action";
-import BackButton from "../../../../components/BackButton";
+import { saveFitnessGoal } from "@/app/action";
+import BackButton from "@/components/BackButton";
 
 export default function GoalPage() {
   return (

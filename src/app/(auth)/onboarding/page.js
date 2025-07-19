@@ -1,5 +1,5 @@
-import { saveOnboardingData } from "../../action";
-import BackButton from "../../../components/BackButton";
+import { saveOnboardingData } from "@/app/action";
+import BackButton from "@/components/BackButton";
 
 export default function OnboardingPage() {
   return (
