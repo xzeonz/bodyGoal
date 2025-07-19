@@ -8,8 +8,6 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 
-const CACHE_DURATION_HOURS = 24; // Saran dan rencana AI akan valid selama 24 jam
-
 // =================================================================
 // HELPERS
 // =================================================================
@@ -80,7 +78,7 @@ export async function registerUser(formData) {
     data: { name, email, password },
   });
 
-  redirect("/onboarding");
+  redirect("/login");
 }
 
 // Fungsi untuk login pengguna
