@@ -1,4 +1,5 @@
 import { loginUser } from "@/app/action";
+import Link from "next/link";
 
 export default async function LoginPage({ searchParams }) {
   const params = await searchParams;
@@ -82,7 +83,7 @@ export default async function LoginPage({ searchParams }) {
         </div>
 
         {/* Google Sign-In */}
-        <a
+        <Link
           href="/api/auth/google"
           className="w-full py-2 border border-gray-300 rounded-lg hover:bg-gray-100 flex items-center justify-center gap-2 transition"
         >
@@ -107,7 +108,7 @@ export default async function LoginPage({ searchParams }) {
           <span className="text-sm text-gray-700 font-medium">
             Sign in with Google
           </span>
-        </a>
+        </Link>
 
         <p className="text-center text-sm text-gray-500 mt-2">
           Don&apos;t have an account?{" "}
