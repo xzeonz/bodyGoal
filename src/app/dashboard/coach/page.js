@@ -1,4 +1,5 @@
 import { askCoach } from "../../action.js";
+import ReactMarkdown from "react-markdown";
 
 export default async function CoachPage({ searchParams }) {
   const resolvedSearchParams = await searchParams;
@@ -26,9 +27,9 @@ export default async function CoachPage({ searchParams }) {
             🤖 Coach Response
           </h4>
           <div className="prose prose-sm max-w-none">
-            <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">
+            <ReactMarkdown className="text-gray-700 leading-relaxed whitespace-pre-wrap">
               {decodeURIComponent(resolvedSearchParams.response)}
-            </p>
+            </ReactMarkdown>
           </div>
         </div>
       )}
